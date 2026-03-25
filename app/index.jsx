@@ -1,10 +1,29 @@
 import { View, Text, StyleSheet, TouchableOpacity, Image, Dimensions } from "react-native";
 import { useRouter } from "expo-router";
+import { useEffect, useState } from "react";
+import { getAuth } from "../utils/authStorage";
 
 const { width, height } = Dimensions.get("window");
 
 export default function WelcomeScreen() {
   const router = useRouter();
+  const [checked, setChecked] = useState(false);
+
+  useEffect(() => {
+    getAuth().then(({ token }) => {
+      if (token) {
+        router.replace("/(tabs)/home");
+      } else {
+        setChecked(true);
+      }
+    });
+  }, []);
+
+  if (!checked) return (
+    <View style={styles.container}>
+      <Text style={styles.appName}>DoggosHeaven 🐾</Text>
+    </View>
+  );
 
   return (
     <View style={styles.container}>
@@ -37,7 +56,7 @@ export default function WelcomeScreen() {
 
         <TouchableOpacity
           style={styles.getStartedButton}
-          onPress={() => router.replace("/(tabs)/home")}
+          onPress={() => router.push("/auth/login")}
           activeOpacity={0.8}
         >
           <Text style={styles.getStartedText}>Get Started</Text>

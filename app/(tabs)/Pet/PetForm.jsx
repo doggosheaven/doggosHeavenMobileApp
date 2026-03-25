@@ -1,745 +1,522 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import {
-  View,
-  ScrollView,
-  StyleSheet,
-  TouchableOpacity,
-  Alert,
+  View, Text, ScrollView, StyleSheet, TouchableOpacity,
+  TextInput, Alert, ActivityIndicator, Modal, Image,
 } from "react-native";
-import {
-  Text,
-  TextInput,
-  Button,
-  Checkbox,
-  Surface,
-  Divider,
-  useTheme,
-  Provider as PaperProvider,
-  DefaultTheme,
-  SegmentedButtons,
-  Menu,
-} from "react-native-paper";
+import * as ImagePicker from "expo-image-picker";
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import Header from "../../../components/Header";
+import { getAuth } from "../../../utils/authStorage";
+import { BASE_URL } from "../../../constants/api";
 
-// ─── Theme ───────────────────────────────────────────────────────────────────
-const theme = {
-  ...DefaultTheme,
-  colors: {
-    ...DefaultTheme.colors,
-    primary: "#3E7B27",
-    secondary: "#85A947",
-    background: "#F7F3EA",
-    surface: "#FFFFFF",
-    onSurface: "#123524",
-    outline: "#85A947",
-    error: "#D32F2F",
-  },
-};
-
-// ─── Constants ────────────────────────────────────────────────────────────────
 const DOG_BREEDS = [
-  "Labrador Retriever",
-  "German Shepherd",
-  "Golden Retriever",
-  "Shih Tzu",
-  "Siberian Husky",
-  "Poodle (Toy, Miniature, Standard)",
-  "Maltipoo",
-  "Pug",
-  "Beagle",
-  "Rottweiler",
-  "Doberman Pinscher",
-  "Boxer",
-  "Great Dane",
-  "Saint Bernard",
-  "Cocker Spaniel",
-  "Lhasa Apso",
-  "Dachshund",
-  "Chihuahua (Teacup & Standard)",
-  "Pitbull Terrier",
-  "Akita Inu",
-  "Dalmatian",
-  "French Bulldog",
-  "English Bulldog",
-  "Border Collie",
-  "Bullmastiff",
-  "Alaskan Malamute",
-  "Cane Corso",
-  "Belgian Malinois",
-  "Pomeranian",
-  "Yorkshire Terrier",
-  "Maltese",
-  "Samoyed",
-  "Jack Russell Terrier",
-  "Shiba Inu",
-  "Indian Spitz",
-  "Rajapalayan",
-  "Indie",
-  "Other",
+  "Labrador Retriever", "German Shepherd", "Golden Retriever", "Shih Tzu",
+  "Siberian Husky", "Poodle", "Maltipoo", "Pug", "Beagle", "Rottweiler",
+  "Doberman Pinscher", "Boxer", "Great Dane", "Saint Bernard", "Cocker Spaniel",
+  "Lhasa Apso", "Dachshund", "Chihuahua", "Pitbull Terrier", "Akita Inu",
+  "Dalmatian", "French Bulldog", "English Bulldog", "Border Collie", "Bullmastiff",
+  "Alaskan Malamute", "Cane Corso", "Belgian Malinois", "Pomeranian",
+  "Yorkshire Terrier", "Maltese", "Samoyed", "Jack Russell Terrier", "Shiba Inu",
+  "Indian Spitz", "Rajapalayan", "Indie", "Other",
 ];
 
-const SPECIES_OPTIONS = [
-  { value: "dog", label: "Dog" },
-  { value: "other", label: "Other" },
-];
-
-// ─── Helper: today's date string ─────────────────────────────────────────────
 const today = () => new Date().toISOString().split("T")[0];
 
-// ─── Sub-components ──────────────────────────────────────────────────────────
+const emptyPet = () => ({
+  name: "", species: "dog", customSpecies: "", breed: "", sex: "Male",
+  color: "", dob: "", dob_d: "", dob_m: "", dob_y: "", neutered: false, vaccinations: [], image: null,
+});
 
-const SectionHeader = ({ title }) => (
-  <View style={styles.sectionHeader}>
-    <View style={styles.dot} />
-    <Text style={styles.sectionTitle}>{title}</Text>
-  </View>
-);
-
-const FieldLabel = ({ children }) => (
-  <Text style={styles.fieldLabel}>{children}</Text>
-);
-
-// Simple dropdown using RN Paper Menu
-const DropdownMenu = ({ label, value, options, onSelect }) => {
-  const [visible, setVisible] = useState(false);
-
+// ── Breed Picker Modal ────────────────────────────────────────────────────────
+function BreedPicker({ visible, breeds, onSelect, onClose }) {
+  const [search, setSearch] = useState("");
+  const filtered = breeds.filter((b) => b.toLowerCase().includes(search.toLowerCase()));
   return (
-    <View style={styles.dropdownWrapper}>
-      <Menu
-        visible={visible}
-        onDismiss={() => setVisible(false)}
-        contentStyle={styles.menuContent}
-        anchor={
-          <TouchableOpacity
-            onPress={() => setVisible(true)}
-            style={styles.dropdownAnchor}
-          >
-            <Text style={value ? styles.dropdownValue : styles.dropdownPlaceholder}>
-              {value || label}
-            </Text>
-            <Text style={styles.dropdownChevron}>▾</Text>
-          </TouchableOpacity>
-        }
-      >
-        <ScrollView style={{ maxHeight: 240 }}>
-          {options.map((opt) => {
-            const optLabel = typeof opt === "string" ? opt : opt.label;
-            const optValue = typeof opt === "string" ? opt : opt.value;
-            return (
-              <Menu.Item
-                key={optValue}
-                onPress={() => {
-                  onSelect(optValue);
-                  setVisible(false);
-                }}
-                title={optLabel}
-                titleStyle={styles.menuItemTitle}
-              />
-            );
-          })}
-        </ScrollView>
-      </Menu>
-    </View>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={modal.overlay}>
+        <View style={modal.box}>
+          <View style={modal.header}>
+            <Text style={modal.title}>Select Breed</Text>
+            <TouchableOpacity onPress={onClose}>
+              <Ionicons name="close" size={22} color="#0B3D2E" />
+            </TouchableOpacity>
+          </View>
+          <View style={modal.searchBox}>
+            <Ionicons name="search-outline" size={16} color="#aaa" style={{ marginRight: 6 }} />
+            <TextInput
+              style={modal.searchInput}
+              placeholder="Search breed..."
+              placeholderTextColor="#aaa"
+              value={search}
+              onChangeText={setSearch}
+            />
+          </View>
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {filtered.map((b) => (
+              <TouchableOpacity key={b} style={modal.item} onPress={() => { onSelect(b); onClose(); }}>
+                <Text style={modal.itemText}>{b}</Text>
+                <Ionicons name="chevron-forward" size={14} color="#A8D96C" />
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
   );
-};
+}
 
-// Vaccination row
-const VaccinationRow = ({ vaccination, onChange, onRemove }) => (
-  <View style={styles.vaccinationRow}>
-    <TextInput
-      mode="outlined"
-      placeholder="Vaccination Name"
-      value={vaccination.name}
-      onChangeText={(v) => onChange("name", v)}
-      style={[styles.input, { flex: 1 }]}
-      outlineColor="#85A947"
-      activeOutlineColor="#3E7B27"
-      dense
-    />
-    <TextInput
-      mode="outlined"
-      placeholder="Doses"
-      value={vaccination.numberOfDose}
-      onChangeText={(v) => onChange("numberOfDose", v)}
-      keyboardType="numeric"
-      style={[styles.input, { width: 80 }]}
-      outlineColor="#85A947"
-      activeOutlineColor="#3E7B27"
-      dense
-    />
-    <Button
-      mode="contained"
-      onPress={onRemove}
-      buttonColor="#EF5350"
-      textColor="#fff"
-      style={styles.removeBtn}
-      compact
-    >
-      ✕
-    </Button>
+// ── Field Label ───────────────────────────────────────────────────────────────
+const Label = ({ text, required }) => (
+  <Text style={styles.label}>{text}{required && <Text style={{ color: "#C62828" }}> *</Text>}</Text>
+);
+
+// ── Input Box ─────────────────────────────────────────────────────────────────
+const InputBox = ({ icon, ...props }) => (
+  <View style={styles.inputBox}>
+    {icon && <Ionicons name={icon} size={18} color="#3E7B27" style={styles.inputIcon} />}
+    <TextInput style={styles.input} placeholderTextColor="#aaa" {...props} />
   </View>
 );
 
-// Single pet card
-const PetCard = ({ pet, petIndex, onUpdate, onRemove, showRemove }) => {
-  const handleField = (key, value) => onUpdate(petIndex, key, value);
+// ── Toggle Buttons (Species / Sex) ────────────────────────────────────────────
+const ToggleGroup = ({ options, value, onChange }) => (
+  <View style={styles.toggleRow}>
+    {options.map((opt) => (
+      <TouchableOpacity
+        key={opt.value}
+        style={[styles.toggleBtn, value === opt.value && styles.toggleBtnActive]}
+        onPress={() => onChange(opt.value)}
+        activeOpacity={0.8}
+      >
+        <Text style={[styles.toggleText, value === opt.value && styles.toggleTextActive]}>
+          {opt.label}
+        </Text>
+      </TouchableOpacity>
+    ))}
+  </View>
+);
 
-  const handleVaccinationChange = (vIdx, key, value) => {
-    const updated = pet.vaccinations.map((v, i) =>
-      i === vIdx ? { ...v, [key]: value } : v
-    );
-    handleField("vaccinations", updated);
-  };
+// ── Pet Card ──────────────────────────────────────────────────────────────────
+function PetCard({ pet, index, onUpdate, onRemove, showRemove }) {
+  const [breedModal, setBreedModal] = useState(false);
 
-  const handleAddVaccination = () => {
-    handleField("vaccinations", [
-      ...pet.vaccinations,
-      { name: "", numberOfDose: "" },
-    ]);
-  };
+  const set = (key, val) => onUpdate(index, key, val);
 
-  const handleRemoveVaccination = (vIdx) => {
-    handleField(
-      "vaccinations",
-      pet.vaccinations.filter((_, i) => i !== vIdx)
-    );
-  };
+  const addVaccination = () => set("vaccinations", [...pet.vaccinations, { name: "" }]);
+  const removeVaccination = (i) => set("vaccinations", pet.vaccinations.filter((_, idx) => idx !== i));
+  const updateVaccination = (i, val) =>
+    set("vaccinations", pet.vaccinations.map((v, idx) => idx === i ? { name: val } : v));
 
   return (
-    <Surface style={styles.petCard} elevation={1}>
-      {/* Pet card header */}
+    <View style={styles.petCard}>
       <View style={styles.petCardHeader}>
         <View style={styles.petCardTitleRow}>
-          <View style={styles.dotSmall} />
-          <Text style={styles.petCardTitle}>Pet #{petIndex + 1}</Text>
+          <View style={styles.petDot} />
+          <Text style={styles.petCardTitle}>Pet #{index + 1}</Text>
         </View>
         {showRemove && (
-          <Button
-            mode="contained"
-            onPress={onRemove}
-            buttonColor="#EF5350"
-            textColor="#fff"
-            icon="delete"
-            compact
-            style={styles.removeBtn}
-          >
-            Remove
-          </Button>
+          <TouchableOpacity style={styles.removePetBtn} onPress={onRemove}>
+            <Ionicons name="trash-outline" size={16} color="#C62828" />
+            <Text style={styles.removePetText}>Remove</Text>
+          </TouchableOpacity>
         )}
       </View>
 
-      {/* Pet Name */}
-      <FieldLabel>Pet Name</FieldLabel>
-      <TextInput
-        mode="outlined"
-        placeholder="Enter pet's name"
-        value={pet.name}
-        onChangeText={(v) => handleField("name", v)}
-        style={styles.input}
-        outlineColor="#85A947"
-        activeOutlineColor="#3E7B27"
-      />
-
-      {/* Species */}
-      <FieldLabel>Species</FieldLabel>
-      <SegmentedButtons
-        value={pet.species}
-        onValueChange={(v) => handleField("species", v)}
-        buttons={SPECIES_OPTIONS}
-        style={styles.segmented}
-        theme={{ colors: { secondaryContainer: "#3E7B27", onSecondaryContainer: "#fff" } }}
-      />
-
-      {/* Breed */}
-      <FieldLabel>Breed</FieldLabel>
-      <DropdownMenu
-        label="Select a breed"
-        value={pet.breed}
-        options={pet.species === "dog" ? DOG_BREEDS : ["Other"]}
-        onSelect={(v) => handleField("breed", v)}
-      />
-
-      {/* Sex */}
-      <FieldLabel>Sex</FieldLabel>
-      <SegmentedButtons
-        value={pet.sex}
-        onValueChange={(v) => handleField("sex", v)}
-        buttons={[
-          { value: "Male", label: "Male" },
-          { value: "Female", label: "Female" },
-        ]}
-        style={styles.segmented}
-        theme={{ colors: { secondaryContainer: "#3E7B27", onSecondaryContainer: "#fff" } }}
-      />
-
-      {/* Color */}
-      <FieldLabel>Color</FieldLabel>
-      <TextInput
-        mode="outlined"
-        placeholder="Enter pet's color"
-        value={pet.color}
-        onChangeText={(v) => handleField("color", v)}
-        style={styles.input}
-        outlineColor="#85A947"
-        activeOutlineColor="#3E7B27"
-      />
-
-      {/* Date of Birth */}
-      <FieldLabel>Date of Birth</FieldLabel>
-      <TextInput
-        mode="outlined"
-        placeholder="YYYY-MM-DD"
-        value={pet.dob}
-        onChangeText={(v) => handleField("dob", v)}
-        style={styles.input}
-        outlineColor="#85A947"
-        activeOutlineColor="#3E7B27"
-        right={<TextInput.Icon icon="calendar" color="#3E7B27" />}
-      />
-
-      {/* Registration Date */}
-      <FieldLabel>Registration Date</FieldLabel>
-      <TextInput
-        mode="outlined"
-        placeholder="YYYY-MM-DD"
-        value={pet.registrationDate}
-        onChangeText={(v) => handleField("registrationDate", v)}
-        style={styles.input}
-        outlineColor="#85A947"
-        activeOutlineColor="#3E7B27"
-        right={<TextInput.Icon icon="calendar" color="#3E7B27" />}
-      />
-
-      {/* Neutered */}
+      {/* Pet Image */}
+      <Label text="Pet Photo" />
       <TouchableOpacity
-        onPress={() => handleField("neutered", !pet.neutered)}
-        style={styles.checkboxRow}
+        style={styles.imagePicker}
+        onPress={async () => {
+          const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (status !== "granted") { Alert.alert("Permission needed", "Please allow access to your photo library."); return; }
+          const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 0.7 });
+          if (!result.canceled) set("image", result.assets[0].uri);
+        }}
+        activeOpacity={0.8}
       >
-        <Checkbox
-          status={pet.neutered ? "checked" : "unchecked"}
-          color="#3E7B27"
-          onPress={() => handleField("neutered", !pet.neutered)}
-        />
-        <Text style={styles.checkboxLabel}>Pet has been neutered/spayed</Text>
+        {pet.image ? (
+          <>
+            <Image source={{ uri: pet.image }} style={styles.petImage} />
+            <TouchableOpacity style={styles.removeImageBtn} onPress={() => set("image", null)}>
+              <Ionicons name="close-circle" size={22} color="#C62828" />
+            </TouchableOpacity>
+          </>
+        ) : (
+          <View style={styles.imagePickerInner}>
+            <View style={styles.imageIconBox}>
+              <Ionicons name="camera" size={28} color="#A8D96C" />
+            </View>
+            <Text style={styles.imagePickerText}>Add Pet Photo</Text>
+            <Text style={styles.imagePickerSub}>Tap to upload from gallery</Text>
+          </View>
+        )}
+      </TouchableOpacity>
+
+      <Label text="Pet Name" required />
+      <InputBox icon="paw-outline" placeholder="Enter pet's name" value={pet.name} onChangeText={(v) => set("name", v)} />
+
+      <Label text="Species" />
+      <ToggleGroup
+        options={[{ value: "dog", label: "🐶 Dog" }, { value: "other", label: "🐾 Other" }]}
+        value={pet.species} onChange={(v) => { set("species", v); set("breed", ""); set("customSpecies", ""); }}
+      />
+      {pet.species === "other" && (
+        <InputBox icon="paw-outline" placeholder="Enter species (e.g. Cat, Rabbit...)" value={pet.customSpecies || ""} onChangeText={(v) => set("customSpecies", v)} />
+      )}
+
+      <Label text="Breed" />
+      <TouchableOpacity style={styles.selectBox} onPress={() => setBreedModal(true)} activeOpacity={0.8}>
+        <Ionicons name="list-outline" size={18} color="#3E7B27" style={styles.inputIcon} />
+        <Text style={pet.breed ? styles.selectValue : styles.selectPlaceholder}>
+          {pet.breed || "Select a breed"}
+        </Text>
+        <Ionicons name="chevron-down" size={16} color="#aaa" />
+      </TouchableOpacity>
+      <BreedPicker
+        visible={breedModal}
+        breeds={pet.species === "dog" ? DOG_BREEDS : ["Other"]}
+        onSelect={(v) => set("breed", v)}
+        onClose={() => setBreedModal(false)}
+      />
+
+      <Label text="Sex" />
+      <ToggleGroup
+        options={[{ value: "Male", label: "♂ Male" }, { value: "Female", label: "♀ Female" }]}
+        value={pet.sex} onChange={(v) => set("sex", v)}
+      />
+
+      <Label text="Color" />
+      <InputBox icon="color-palette-outline" placeholder="e.g. Golden, Black & White" value={pet.color} onChangeText={(v) => set("color", v)} />
+
+      <Label text="Date of Birth" required />
+      <View style={styles.dobRow}>
+        <View style={[styles.inputBox, styles.dobField]}>
+          <TextInput
+            style={styles.input}
+            placeholder="DD"
+            placeholderTextColor="#aaa"
+            value={pet.dob_d || ""}
+            onChangeText={(v) => {
+              if (v.length <= 2) {
+                set("dob_d", v);
+                const mm = pet.dob_m || ""; const yyyy = pet.dob_y || "";
+                if (v.length === 2 && mm.length === 2 && yyyy.length === 4) set("dob", `${yyyy}-${mm}-${v}`);
+              }
+            }}
+            keyboardType="numeric" maxLength={2}
+          />
+        </View>
+        <Text style={styles.dobSep}>/</Text>
+        <View style={[styles.inputBox, styles.dobField]}>
+          <TextInput
+            style={styles.input}
+            placeholder="MM"
+            placeholderTextColor="#aaa"
+            value={pet.dob_m || ""}
+            onChangeText={(v) => {
+              if (v.length <= 2) {
+                set("dob_m", v);
+                const dd = pet.dob_d || ""; const yyyy = pet.dob_y || "";
+                if (dd.length === 2 && v.length === 2 && yyyy.length === 4) set("dob", `${yyyy}-${v}-${dd}`);
+              }
+            }}
+            keyboardType="numeric" maxLength={2}
+          />
+        </View>
+        <Text style={styles.dobSep}>/</Text>
+        <View style={[styles.inputBox, { flex: 2 }]}>
+          <TextInput
+            style={styles.input}
+            placeholder="YYYY"
+            placeholderTextColor="#aaa"
+            value={pet.dob_y || ""}
+            onChangeText={(v) => {
+              if (v.length <= 4) {
+                set("dob_y", v);
+                const dd = pet.dob_d || ""; const mm = pet.dob_m || "";
+                if (dd.length === 2 && mm.length === 2 && v.length === 4) set("dob", `${v}-${mm}-${dd}`);
+              }
+            }}
+            keyboardType="numeric" maxLength={4}
+          />
+        </View>
+      </View>
+
+      <TouchableOpacity style={styles.checkRow} onPress={() => set("neutered", !pet.neutered)} activeOpacity={0.8}>
+        <View style={[styles.checkbox, pet.neutered && styles.checkboxChecked]}>
+          {pet.neutered && <Ionicons name="checkmark" size={14} color="#fff" />}
+        </View>
+        <Text style={styles.checkLabel}>Pet has been neutered / spayed</Text>
       </TouchableOpacity>
 
       {/* Vaccinations */}
-      <Divider style={styles.divider} />
-      <SectionHeader title="Vaccinations" />
-
-      {pet.vaccinations.map((v, vIdx) => (
-        <VaccinationRow
-          key={vIdx}
-          vaccination={v}
-          onChange={(key, value) => handleVaccinationChange(vIdx, key, value)}
-          onRemove={() => handleRemoveVaccination(vIdx)}
-        />
-      ))}
-
-      <Button
-        mode="outlined"
-        onPress={handleAddVaccination}
-        icon="plus-circle-outline"
-        textColor="#3E7B27"
-        style={styles.addVaccinationBtn}
-      >
-        Add Vaccination
-      </Button>
-    </Surface>
+      <View style={styles.vacSection}>
+        <Text style={styles.vacTitle}>💉 Vaccinations</Text>
+        {pet.vaccinations.map((v, i) => (
+          <View key={i} style={styles.vacRow}>
+            <View style={[styles.inputBox, { flex: 1, marginBottom: 0 }]}>
+              <TextInput
+                style={styles.input}
+                placeholder="Vaccination name"
+                placeholderTextColor="#aaa"
+                value={v.name}
+                onChangeText={(val) => updateVaccination(i, val)}
+              />
+            </View>
+            <TouchableOpacity style={styles.vacRemoveBtn} onPress={() => removeVaccination(i)}>
+              <Ionicons name="close" size={16} color="#C62828" />
+            </TouchableOpacity>
+          </View>
+        ))}
+        <TouchableOpacity style={styles.addVacBtn} onPress={addVaccination} activeOpacity={0.8}>
+          <Ionicons name="add-circle-outline" size={16} color="#3E7B27" />
+          <Text style={styles.addVacText}>Add Vaccination</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   );
-};
+}
 
-// ─── Main Form ────────────────────────────────────────────────────────────────
-const emptyPet = () => ({
-  name: "",
-  species: "dog",
-  breed: "",
-  sex: "Male",
-  color: "",
-  dob: "",
-  registrationDate: today(),
-  neutered: false,
-  vaccinations: [],
-});
-
-const PetForm = () => {
-  const [ownerName, setOwnerName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [phoneError, setPhoneError] = useState("");
-  const [email, setEmail] = useState("");
-  const [address, setAddress] = useState("");
+// ── Main Form ─────────────────────────────────────────────────────────────────
+export default function PetForm() {
+  const router = useRouter();
   const [pets, setPets] = useState([emptyPet()]);
+  const [loading, setLoading] = useState(false);
 
-  const validatePhone = (val) => {
-    if (!/^[0-9]{10}$/.test(val)) {
-      setPhoneError("Enter a valid 10-digit phone number");
-    } else {
-      setPhoneError("");
+  const updatePet = (index, key, value) =>
+    setPets((prev) => prev.map((p, i) => i === index ? { ...p, [key]: value } : p));
+
+  const handleSubmit = async () => {
+    for (let i = 0; i < pets.length; i++) {
+      const p = pets[i];
+      if (!p.name.trim()) return Alert.alert("Error", `Pet #${i + 1}: Name is required.`);
+      if (!p.dob.trim()) return Alert.alert("Error", `Pet #${i + 1}: Date of birth is required.`);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(p.dob)) return Alert.alert("Error", `Pet #${i + 1}: DOB must be YYYY-MM-DD format.`);
     }
-  };
 
-  const handlePhoneChange = (val) => {
-    if (val.length <= 10) {
-      setPhone(val);
-      if (val.length === 10) validatePhone(val);
-      else setPhoneError("");
+    setLoading(true);
+    try {
+      const { token } = await getAuth();
+      const results = await Promise.all(
+        pets.map((pet) => {
+          const formData = new FormData();
+          formData.append("name", pet.name.trim());
+          formData.append("species", pet.species === "other" ? (pet.customSpecies?.trim() || "other") : pet.species);
+          formData.append("breed", pet.breed || "");
+          formData.append("sex", pet.sex);
+          formData.append("color", pet.color || "");
+          formData.append("dob", pet.dob);
+          formData.append("neutered", String(pet.neutered));
+          formData.append("vaccinations", JSON.stringify(pet.vaccinations));
+          formData.append("registrationDate", today());
+          if (pet.image) formData.append("image", { uri: pet.image, name: "pet.jpg", type: "image/jpeg" });
+          return fetch(`${BASE_URL}/api/v1/customer/pet/register`, {
+            method: "POST",
+            headers: { Authorization: token || "" },
+            body: formData,
+          }).then((r) => r.json());
+        })
+      );
+
+      const failed = results.find((r) => !r.success);
+      if (failed) {
+        Alert.alert("Error", failed.message || "Failed to register pet.");
+      } else {
+        Alert.alert("Success 🐾", `${pets.length > 1 ? "Pets" : "Pet"} registered successfully!`, [
+          { text: "OK", onPress: () => router.back() },
+        ]);
+      }
+    } catch (e) {
+      Alert.alert("Error", "Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
     }
-  };
-
-  const handlePetUpdate = (petIndex, key, value) => {
-    setPets((prev) =>
-      prev.map((p, i) => (i === petIndex ? { ...p, [key]: value } : p))
-    );
-  };
-
-  const handleAddPet = () => setPets((prev) => [...prev, emptyPet()]);
-
-  const handleRemovePet = (idx) =>
-    setPets((prev) => prev.filter((_, i) => i !== idx));
-
-  const handleSubmit = () => {
-    if (!ownerName || !phone || !address) {
-      Alert.alert("Validation Error", "Please fill in all required fields.");
-      return;
-    }
-    if (phoneError) {
-      Alert.alert("Validation Error", "Please fix phone number errors.");
-      return;
-    }
-    const formData = { ownerName, phone, email, address, pets };
-    console.log("Form Data:", JSON.stringify(formData, null, 2));
-    Alert.alert("Success", "Pet registration submitted successfully!");
   };
 
   return (
-    <PaperProvider theme={theme}>
-      <ScrollView
-        style={styles.screen}
-        contentContainerStyle={styles.container}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* Page Title */}
-        <View style={styles.pageHeader}>
-          <View style={styles.dotMedium} />
-          <Text style={styles.pageTitle}>Add New Pet & Owner</Text>
+    <View style={styles.container}>
+      <Header title="Add Pet" showBack />
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+
+        {/* Hero */}
+        <View style={styles.hero}>
+          <View style={styles.heroIcon}>
+            <Ionicons name="paw" size={36} color="#A8D96C" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.heroTitle}>Register Your Pet</Text>
+            <Text style={styles.heroSub}>Add your furry friend to DoggosHeaven</Text>
+          </View>
         </View>
 
-        {/* ── Owner Information ─────────────────────────── */}
-        <Surface style={styles.section} elevation={1}>
-          <SectionHeader title="Owner Information" />
-
-          <FieldLabel>Owner Name *</FieldLabel>
-          <TextInput
-            mode="outlined"
-            placeholder="Enter owner's full name"
-            value={ownerName}
-            onChangeText={setOwnerName}
-            style={styles.input}
-            outlineColor="#85A947"
-            activeOutlineColor="#3E7B27"
+        {/* Pet Cards */}
+        {pets.map((pet, i) => (
+          <PetCard
+            key={i} pet={pet} index={i}
+            onUpdate={updatePet}
+            onRemove={() => setPets((prev) => prev.filter((_, idx) => idx !== i))}
+            showRemove={pets.length > 1}
           />
+        ))}
 
-          <FieldLabel>Phone Number *</FieldLabel>
-          <TextInput
-            mode="outlined"
-            placeholder="10-digit phone number"
-            value={phone}
-            onChangeText={handlePhoneChange}
-            keyboardType="phone-pad"
-            maxLength={10}
-            style={styles.input}
-            outlineColor={phoneError ? "#D32F2F" : "#85A947"}
-            activeOutlineColor={phoneError ? "#D32F2F" : "#3E7B27"}
-            error={!!phoneError}
-          />
-          {!!phoneError && (
-            <Text style={styles.errorText}>{phoneError}</Text>
+        {/* Add Another Pet */}
+        <TouchableOpacity style={styles.addPetBtn} onPress={() => setPets((p) => [...p, emptyPet()])} activeOpacity={0.8}>
+          <Ionicons name="add-circle-outline" size={20} color="#0B3D2E" />
+          <Text style={styles.addPetText}>Add Another Pet</Text>
+        </TouchableOpacity>
+
+        {/* Submit */}
+        <TouchableOpacity style={styles.submitBtn} onPress={handleSubmit} activeOpacity={0.85} disabled={loading}>
+          {loading ? (
+            <ActivityIndicator size="small" color="#A8D96C" />
+          ) : (
+            <>
+              <Ionicons name="checkmark-circle-outline" size={22} color="#A8D96C" />
+              <Text style={styles.submitText}>Register {pets.length > 1 ? `${pets.length} Pets` : "Pet"}</Text>
+            </>
           )}
-
-          <FieldLabel>Email Address</FieldLabel>
-          <TextInput
-            mode="outlined"
-            placeholder="Enter email address"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            style={styles.input}
-            outlineColor="#85A947"
-            activeOutlineColor="#3E7B27"
-          />
-
-          <FieldLabel>Address *</FieldLabel>
-          <TextInput
-            mode="outlined"
-            placeholder="Enter complete address including city, state, and postal code"
-            value={address}
-            onChangeText={setAddress}
-            multiline
-            numberOfLines={4}
-            style={[styles.input, styles.textarea]}
-            outlineColor="#85A947"
-            activeOutlineColor="#3E7B27"
-          />
-        </Surface>
-
-        {/* ── Pet Information ───────────────────────────── */}
-        <Surface style={styles.section} elevation={1}>
-          <SectionHeader title="Pet Information" />
-
-          {pets.map((pet, idx) => (
-            <PetCard
-              key={idx}
-              pet={pet}
-              petIndex={idx}
-              onUpdate={handlePetUpdate}
-              onRemove={() => handleRemovePet(idx)}
-              showRemove={pets.length > 1 && idx > 0}
-            />
-          ))}
-
-          <Button
-            mode="outlined"
-            onPress={handleAddPet}
-            icon="plus-circle-outline"
-            textColor="#3E7B27"
-            style={styles.addPetBtn}
-          >
-            Add Another Pet
-          </Button>
-        </Surface>
-
-        {/* ── Submit ────────────────────────────────────── */}
-        <Button
-          mode="contained"
-          onPress={handleSubmit}
-          buttonColor="#3E7B27"
-          textColor="#fff"
-          style={styles.submitBtn}
-          contentStyle={styles.submitBtnContent}
-          labelStyle={styles.submitBtnLabel}
-          icon="paw"
-        >
-          Submit Pet Registration
-        </Button>
+        </TouchableOpacity>
 
         <View style={{ height: 40 }} />
       </ScrollView>
-    </PaperProvider>
+    </View>
   );
-};
+}
 
-// ─── Styles ──────────────────────────────────────────────────────────────────
+// ── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: "#F7F3EA",
-  },
-  container: {
-    padding: 16,
-    paddingTop: 48,
-  },
+  container: { flex: 1, backgroundColor: "#F0F7F0" },
+  scroll: { padding: 16 },
 
-  // Page header
-  pageHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 20,
-    gap: 10,
+  hero: {
+    backgroundColor: "#0B3D2E", borderRadius: 20, padding: 20,
+    flexDirection: "row", alignItems: "center", gap: 16, marginBottom: 20, elevation: 3,
   },
-  pageTitle: {
-    fontSize: 26,
-    fontWeight: "800",
-    color: "#123524",
-    letterSpacing: -0.5,
+  heroIcon: {
+    width: 64, height: 64, borderRadius: 32,
+    backgroundColor: "#1A5C3A", justifyContent: "center", alignItems: "center",
   },
-  dotMedium: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: "#3E7B27",
-  },
+  heroTitle: { fontSize: 20, fontFamily: "Poppins_700Bold", color: "#fff", marginBottom: 4 },
+  heroSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#A8D96C" },
 
-  // Sections
-  section: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: "rgba(133,169,71,0.2)",
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 16,
-    gap: 8,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#123524",
-  },
-  dot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: "#85A947",
-  },
-  dotSmall: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#85A947",
-  },
-  divider: {
-    marginVertical: 16,
-    backgroundColor: "rgba(133,169,71,0.3)",
-  },
-
-  // Fields
-  fieldLabel: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#3E7B27",
-    marginBottom: 4,
-    marginTop: 12,
-  },
-  input: {
-    backgroundColor: "#fff",
-    marginBottom: 2,
-    fontSize: 14,
-  },
-  textarea: {
-    minHeight: 96,
-  },
-  errorText: {
-    color: "#D32F2F",
-    fontSize: 12,
-    marginTop: 2,
-    marginBottom: 4,
-  },
-
-  // Segmented
-  segmented: {
-    marginBottom: 4,
-    borderColor: "#85A947",
-  },
-
-  // Dropdown
-  dropdownWrapper: {
-    marginBottom: 4,
-  },
-  dropdownAnchor: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    borderWidth: 1.5,
-    borderColor: "#85A947",
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    backgroundColor: "#fff",
-  },
-  dropdownValue: {
-    color: "#123524",
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  dropdownPlaceholder: {
-    color: "#aaa",
-    fontSize: 14,
-  },
-  dropdownChevron: {
-    color: "#3E7B27",
-    fontSize: 16,
-  },
-  menuContent: {
-    backgroundColor: "#fff",
-  },
-  menuItemTitle: {
-    color: "#123524",
-    fontSize: 14,
-  },
-
-  // Checkbox
-  checkboxRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1.5,
-    borderColor: "#85A947",
-    borderRadius: 10,
-    paddingRight: 12,
-    backgroundColor: "#fff",
-    marginTop: 12,
-  },
-  checkboxLabel: {
-    color: "#123524",
-    fontSize: 14,
-    fontWeight: "500",
-    flexShrink: 1,
-  },
-
-  // Pet card
   petCard: {
-    backgroundColor: "rgba(239,227,194,0.2)",
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: "rgba(133,169,71,0.2)",
+    backgroundColor: "#fff", borderRadius: 18, padding: 18,
+    marginBottom: 16, elevation: 2,
+    borderWidth: 1, borderColor: "#D4EDD4",
   },
-  petCardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  },
-  petCardTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  petCardTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#123524",
-  },
+  petCardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
+  petCardTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  petDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: "#A8D96C" },
+  petCardTitle: { fontSize: 16, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+  removePetBtn: { flexDirection: "row", alignItems: "center", gap: 4, padding: 6, borderRadius: 8, backgroundColor: "#FFF0F0" },
+  removePetText: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#C62828" },
 
-  // Vaccinations
-  vaccinationRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 8,
+  imagePicker: {
+    borderRadius: 14, borderWidth: 1.5, borderColor: "#D4EDD4",
+    borderStyle: "dashed", overflow: "hidden", marginBottom: 2,
+    backgroundColor: "#F8FFF8", minHeight: 130,
+    justifyContent: "center", alignItems: "center",
   },
-  addVaccinationBtn: {
-    marginTop: 8,
-    borderColor: "#85A947",
-    borderRadius: 10,
+  imagePickerInner: { alignItems: "center", paddingVertical: 24 },
+  imageIconBox: {
+    width: 56, height: 56, borderRadius: 28,
+    backgroundColor: "#0B3D2E", justifyContent: "center", alignItems: "center", marginBottom: 10,
   },
+  imagePickerText: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 4 },
+  imagePickerSub: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#999" },
+  petImage: { width: "100%", height: 180, borderRadius: 12 },
+  removeImageBtn: { position: "absolute", top: 8, right: 8 },
 
-  // Buttons
-  removeBtn: {
-    borderRadius: 8,
+  label: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 6, marginTop: 12 },
+
+  inputBox: {
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: "#F0F7F0", borderRadius: 12,
+    borderWidth: 1, borderColor: "#D4EDD4",
+    paddingHorizontal: 12, height: 48, marginBottom: 2,
   },
+  inputIcon: { marginRight: 8 },
+  input: { flex: 1, fontSize: 14, fontFamily: "Inter_400Regular", color: "#1A1A1A" },
+
+  selectBox: {
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: "#F0F7F0", borderRadius: 12,
+    borderWidth: 1, borderColor: "#D4EDD4",
+    paddingHorizontal: 12, height: 48, marginBottom: 2,
+  },
+  selectValue: { flex: 1, fontSize: 14, fontFamily: "Inter_400Regular", color: "#1A1A1A" },
+  selectPlaceholder: { flex: 1, fontSize: 14, fontFamily: "Inter_400Regular", color: "#aaa" },
+
+  toggleRow: { flexDirection: "row", gap: 10, marginBottom: 2 },
+  toggleBtn: {
+    flex: 1, height: 44, borderRadius: 12,
+    justifyContent: "center", alignItems: "center",
+    backgroundColor: "#F0F7F0", borderWidth: 1, borderColor: "#D4EDD4",
+  },
+  toggleBtnActive: { backgroundColor: "#0B3D2E", borderColor: "#0B3D2E" },
+  toggleText: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#666" },
+  toggleTextActive: { color: "#A8D96C" },
+
+  checkRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 14, marginBottom: 4 },
+  checkbox: {
+    width: 22, height: 22, borderRadius: 6,
+    borderWidth: 2, borderColor: "#D4EDD4",
+    justifyContent: "center", alignItems: "center",
+    backgroundColor: "#F0F7F0",
+  },
+  checkboxChecked: { backgroundColor: "#0B3D2E", borderColor: "#0B3D2E" },
+  checkLabel: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#333", flex: 1 },
+
+  vacSection: {
+    marginTop: 16, backgroundColor: "#F8FFF8", borderRadius: 12,
+    padding: 14, borderWidth: 1, borderColor: "#D4EDD4",
+  },
+  vacTitle: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 10 },
+  vacRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
+  vacRemoveBtn: {
+    width: 36, height: 36, borderRadius: 10,
+    backgroundColor: "#FFF0F0", justifyContent: "center", alignItems: "center",
+  },
+  dobRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 },
+  dobField: { flex: 1 },
+  dobSep: { fontSize: 18, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 2 },
+  addVacText: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#3E7B27" },
+
   addPetBtn: {
-    marginTop: 8,
-    borderColor: "#3E7B27",
-    borderRadius: 10,
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    backgroundColor: "#fff", borderRadius: 16, padding: 16,
+    borderWidth: 1.5, borderColor: "#0B3D2E", borderStyle: "dashed",
+    marginBottom: 16,
   },
+  addPetText: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+
   submitBtn: {
-    borderRadius: 14,
-    marginTop: 8,
+    backgroundColor: "#0B3D2E", borderRadius: 16, height: 56,
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
     elevation: 4,
   },
-  submitBtnContent: {
-    paddingVertical: 8,
-  },
-  submitBtnLabel: {
-    fontSize: 16,
-    fontWeight: "700",
-    letterSpacing: 0.5,
-  },
+  submitText: { fontSize: 16, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
 });
 
-export default PetForm;
+const modal = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
+  box: {
+    backgroundColor: "#fff", borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    padding: 20, maxHeight: "75%",
+  },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },
+  title: { fontSize: 16, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+  searchBox: {
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: "#F0F7F0", borderRadius: 12,
+    borderWidth: 1, borderColor: "#D4EDD4",
+    paddingHorizontal: 12, height: 44, marginBottom: 12,
+  },
+  searchInput: { flex: 1, fontSize: 14, fontFamily: "Inter_400Regular", color: "#1A1A1A" },
+  item: {
+    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+    paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F0F7F0",
+  },
+  itemText: { fontSize: 14, fontFamily: "Inter_400Regular", color: "#1A1A1A" },
+});

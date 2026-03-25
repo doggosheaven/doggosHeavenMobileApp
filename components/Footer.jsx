@@ -1,38 +1,42 @@
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { useRouter, usePathname } from "expo-router";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 
 const tabs = [
-  { label: "Home", icon: "home", route: "/(tabs)/home" },
-  { label: "Booking", icon: "calendar", route: "/(tabs)/bookings" },
-  { label: "Profile", icon: "account", route: "/(tabs)/profile" },
-  { label: "Test API", icon: "wifi", route: "/(tabs)/connectiontest" },
+  { label: "Home",     icon: "home-outline",    iconActive: "home",      route: "/home" },
+  { label: "Services", icon: "grid-outline",    iconActive: "grid",      route: "/services" },
+  { label: "Bookings", icon: "calendar-outline",iconActive: "calendar",  route: "/bookings" },
+  { label: "Profile",  icon: "person-outline",  iconActive: "person",    route: "/profile" },
 ];
 
 export default function Footer() {
-  const router = useRouter();
+  const router   = useRouter();
   const pathname = usePathname();
+
+  const handlePress = (tab) => {
+    router.navigate(tab.route);
+  };
 
   return (
     <View style={styles.container}>
       {tabs.map((tab) => {
-        const isActive = pathname === tab.route || (tab.route === "/(tabs)/home" && pathname === "/");
+        const isActive = !tab.scrollToServices && pathname === tab.route;
         return (
           <TouchableOpacity
-            key={tab.route}
+            key={tab.label}
             style={styles.tab}
-            onPress={() => router.push(tab.route)}
+            onPress={() => handlePress(tab)}
             activeOpacity={0.7}
           >
-            <MaterialCommunityIcons
-              name={tab.icon}
+            <Ionicons
+              name={isActive ? tab.iconActive : tab.icon}
               size={24}
-              color={isActive ? "#7BC743" : "#999999"}
+              color={isActive ? "#A8D96C" : "rgba(255,255,255,0.45)"}
             />
-            <Text style={[styles.label, isActive && styles.activeLabel]}>
+            <Text style={[styles.label, isActive && styles.labelActive]}>
               {tab.label}
             </Text>
-            {isActive && <View style={styles.activeDot} />}
+            {isActive && <View style={styles.dot} />}
           </TouchableOpacity>
         );
       })}
@@ -43,16 +47,16 @@ export default function Footer() {
 const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
-    backgroundColor: "#FFFFFF",
-    paddingVertical: 10,
-    paddingBottom: 20,
+    backgroundColor: "#0B3D2E",
+    paddingTop: 10,
+    paddingBottom: 18,
     borderTopWidth: 1,
-    borderTopColor: "#E8E8E8",
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 8,
+    borderTopColor: "rgba(168,217,108,0.2)",
+    elevation: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
   },
   tab: {
     flex: 1,
@@ -61,19 +65,19 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   label: {
-    fontSize: 11,
+    fontSize: 10,
     fontFamily: "Inter_400Regular",
-    color: "#999999",
+    color: "rgba(255,255,255,0.45)",
   },
-  activeLabel: {
-    color: "#7BC743",
+  labelActive: {
+    color: "#A8D96C",
     fontFamily: "Poppins_700Bold",
   },
-  activeDot: {
+  dot: {
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: "#7BC743",
+    backgroundColor: "#A8D96C",
     marginTop: 2,
   },
 });

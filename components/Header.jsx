@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, Image } from "react-native";
 import { useRouter } from "expo-router";
 
 export default function Header({ showBack = false, title = null }) {
@@ -6,35 +6,27 @@ export default function Header({ showBack = false, title = null }) {
 
   return (
     <View style={styles.container}>
-      {/* Left — back button or paw logo */}
+      {/* Left — back button or logo */}
       <View style={styles.left}>
         {showBack ? (
           <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
-            <Text style={styles.backArrow}>←</Text>
+            <Text style={styles.backArrow}>✕</Text>
           </TouchableOpacity>
         ) : (
-          <View style={styles.logoCircle}>
-            <Text style={styles.logoEmoji}>🐾</Text>
-          </View>
+          <Image source={require("../assets/images/doggoswhite.png")} style={styles.logoImg} resizeMode="contain" />
         )}
       </View>
 
       {/* Center — app name or custom title */}
       <View style={styles.center}>
         <Text style={styles.appName}>{title ?? "DoggosHeaven"}</Text>
-        {!title && <Text style={styles.tagline}>Premium Pet Care</Text>}
+        {!title && <Text style={styles.tagline}>Happy Pets, Happy You 🐾</Text>}
       </View>
 
-      {/* Right — notification bell + profile */}
+      {/* Right — notification bell */}
       <View style={styles.right}>
-        <TouchableOpacity style={styles.iconBtn}>
+        <TouchableOpacity style={styles.iconBtn} onPress={() => router.push("/screens/notifications")}>
           <Text style={styles.icon}>🔔</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.avatarBtn}
-          onPress={() => router.push("/profile")}
-        >
-          <Text style={styles.avatarText}>👤</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -70,16 +62,10 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
     gap: 8,
   },
-  logoCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#7BC743",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  logoEmoji: {
-    fontSize: 18,
+  logoImg: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
   },
   appName: {
     fontSize: 18,
@@ -104,15 +90,5 @@ const styles = StyleSheet.create({
   icon: {
     fontSize: 18,
   },
-  avatarBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#7BC743",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  avatarText: {
-    fontSize: 16,
-  },
+
 });
