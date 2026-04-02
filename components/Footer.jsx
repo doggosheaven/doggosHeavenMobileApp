@@ -3,29 +3,25 @@ import { useRouter, usePathname } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
 const tabs = [
-  { label: "Home",     icon: "home-outline",    iconActive: "home",      route: "/home" },
-  { label: "Services", icon: "grid-outline",    iconActive: "grid",      route: "/services" },
-  { label: "Bookings", icon: "calendar-outline",iconActive: "calendar",  route: "/bookings" },
-  { label: "Profile",  icon: "person-outline",  iconActive: "person",    route: "/profile" },
+  { label: "Home",     icon: "home-outline",     iconActive: "home",     route: "/home" },
+  { label: "Services", icon: "grid-outline",      iconActive: "grid",     route: "/services" },
+  { label: "Bookings", icon: "calendar-outline",  iconActive: "calendar", route: "/bookings" },
+  { label: "Profile",  icon: "person-outline",    iconActive: "person",   route: "/profile" },
 ];
 
 export default function Footer() {
   const router   = useRouter();
   const pathname = usePathname();
 
-  const handlePress = (tab) => {
-    router.navigate(tab.route);
-  };
-
   return (
     <View style={styles.container}>
       {tabs.map((tab) => {
-        const isActive = !tab.scrollToServices && pathname === tab.route;
+        const isActive = pathname === tab.route;
         return (
           <TouchableOpacity
             key={tab.label}
             style={styles.tab}
-            onPress={() => handlePress(tab)}
+            onPress={() => router.navigate(tab.route)}
             activeOpacity={0.7}
           >
             <Ionicons

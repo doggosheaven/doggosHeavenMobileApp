@@ -1,12 +1,61 @@
 import { View, Text, TouchableOpacity, StyleSheet, Image } from "react-native";
 import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import { useState, useCallback } from "react";
+import { useFocusEffect } from "@react-navigation/native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getAuth } from "../utils/authStorage";
+import { BASE_URL } from "../constants/api";
+
+const NOTIF_READ_KEY = "notif_read_ids";
 
 export default function Header({ showBack = false, title = null }) {
   const router = useRouter();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useFocusEffect(useCallback(() => {
+    if (showBack) return;
+    const fetchUnread = async () => {
+      try {
+        const { user, token } = await getAuth();
+        if (!user?.id) return;
+        const [res, stored] = await Promise.all([
+          fetch(`${BASE_URL}/api/v1/customerappointment/notifications/${user.id}`,
+            { headers: { Authorization: token || "" } }),
+          AsyncStorage.getItem(NOTIF_READ_KEY),
+        ]);
+        const data = await res.json();
+        if (!data.success) return;
+        const persistedIds = new Set(stored ? JSON.parse(stored) : []);
+        const notifs = data.notifications || [];
+        // visit notifs: use server read field; appointment notifs: use AsyncStorage
+        const unread = notifs.filter((n) => {
+          if (n.source === 'visit') return n.read === false;
+          return !persistedIds.has(String(n.id));
+        }).length;
+        setUnreadCount(unread);
+      } catch {}
+    };
+    fetchUnread();
+  }, [showBack]));
+
+  const handleBellPress = async () => {
+    try {
+      const { user, token } = await getAuth();
+      if (user?.id) {
+        fetch(
+          `${BASE_URL}/api/v1/customerappointment/notifications/${user.id}/markread`,
+          { method: "PATCH", headers: { Authorization: token || "" } }
+        ).catch(() => {});
+      }
+    } catch {}
+    setUnreadCount(0);
+    router.push("/screens/notifications");
+  };
 
   return (
     <View style={styles.container}>
-      {/* Left — back button or logo */}
+      {/* Left */}
       <View style={styles.left}>
         {showBack ? (
           <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
@@ -17,17 +66,29 @@ export default function Header({ showBack = false, title = null }) {
         )}
       </View>
 
-      {/* Center — app name or custom title */}
+      {/* Center */}
       <View style={styles.center}>
         <Text style={styles.appName}>{title ?? "DoggosHeaven"}</Text>
         {!title && <Text style={styles.tagline}>Happy Pets, Happy You 🐾</Text>}
       </View>
 
-      {/* Right — notification bell */}
+      {/* Right — bell with badge (only on main screens) */}
       <View style={styles.right}>
-        <TouchableOpacity style={styles.iconBtn} onPress={() => router.push("/screens/notifications")}>
-          <Text style={styles.icon}>🔔</Text>
-        </TouchableOpacity>
+        {!showBack && (
+          <TouchableOpacity
+            style={styles.iconBtn}
+            onPress={handleBellPress}
+          >
+            <View style={styles.bellWrap}>
+              <Ionicons name="notifications-outline" size={22} color="#fff" />
+              {unreadCount > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeTxt}>{unreadCount > 9 ? "9+" : unreadCount}</Text>
+                </View>
+              )}
+            </View>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -87,8 +148,15 @@ const styles = StyleSheet.create({
   iconBtn: {
     padding: 4,
   },
-  icon: {
-    fontSize: 18,
+  bellWrap: { position: "relative" },
+  badge: {
+    position: "absolute", top: -4, right: -6,
+    backgroundColor: "#C62828", borderRadius: 10,
+    minWidth: 16, height: 16,
+    justifyContent: "center", alignItems: "center",
+    paddingHorizontal: 3, borderWidth: 1.5, borderColor: "#0B3D2E",
   },
+  badgeTxt: { fontSize: 8, fontFamily: "Poppins_700Bold", color: "#fff" },
+  icon: { fontSize: 18 },
 
 });

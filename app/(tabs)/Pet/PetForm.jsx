@@ -28,6 +28,21 @@ const emptyPet = () => ({
   color: "", dob: "", dob_d: "", dob_m: "", dob_y: "", neutered: false, vaccinations: [], image: null,
 });
 
+const emptyVac = () => ({ name: "", date: "", serialNumber: "", nextDueDate: "" });
+
+// Auto-format DD/MM/YYYY
+const formatDateInput = (val, prev) => {
+  const digits = val.replace(/\D/g, "");
+  if (val.length < (prev || "").length) {
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+    return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4, 8)}`;
+  }
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4, 8)}`;
+};
+
 // ── Breed Picker Modal ────────────────────────────────────────────────────────
 function BreedPicker({ visible, breeds, onSelect, onClose }) {
   const [search, setSearch] = useState("");
@@ -97,16 +112,41 @@ const ToggleGroup = ({ options, value, onChange }) => (
   </View>
 );
 
+// ── Photo Source Modal ───────────────────────────────────────────────────────
+function PhotoSourceModal({ visible, onCamera, onGallery, onClose }) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <TouchableOpacity style={modal.overlay} activeOpacity={1} onPress={onClose}>
+        <View style={modal.photoBox}>
+          <Text style={modal.photoTitle}>Add Pet Photo</Text>
+          <TouchableOpacity style={modal.photoBtn} onPress={onCamera} activeOpacity={0.8}>
+            <Ionicons name="camera-outline" size={22} color="#0B3D2E" />
+            <Text style={modal.photoBtnText}>Take Photo</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={modal.photoBtn} onPress={onGallery} activeOpacity={0.8}>
+            <Ionicons name="image-outline" size={22} color="#0B3D2E" />
+            <Text style={modal.photoBtnText}>Choose from Gallery</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={modal.photoCancel} onPress={onClose}>
+            <Text style={modal.photoCancelText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+}
+
 // ── Pet Card ──────────────────────────────────────────────────────────────────
 function PetCard({ pet, index, onUpdate, onRemove, showRemove }) {
   const [breedModal, setBreedModal] = useState(false);
+  const [photoModal, setPhotoModal] = useState(false);
 
   const set = (key, val) => onUpdate(index, key, val);
 
-  const addVaccination = () => set("vaccinations", [...pet.vaccinations, { name: "" }]);
+  const addVaccination = () => set("vaccinations", [...pet.vaccinations, emptyVac()]);
   const removeVaccination = (i) => set("vaccinations", pet.vaccinations.filter((_, idx) => idx !== i));
-  const updateVaccination = (i, val) =>
-    set("vaccinations", pet.vaccinations.map((v, idx) => idx === i ? { name: val } : v));
+  const updateVaccination = (i, field, val) =>
+    set("vaccinations", pet.vaccinations.map((v, idx) => idx === i ? { ...v, [field]: val } : v));
 
   return (
     <View style={styles.petCard}>
@@ -127,12 +167,7 @@ function PetCard({ pet, index, onUpdate, onRemove, showRemove }) {
       <Label text="Pet Photo" />
       <TouchableOpacity
         style={styles.imagePicker}
-        onPress={async () => {
-          const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-          if (status !== "granted") { Alert.alert("Permission needed", "Please allow access to your photo library."); return; }
-          const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 0.7 });
-          if (!result.canceled) set("image", result.assets[0].uri);
-        }}
+        onPress={() => setPhotoModal(true)}
         activeOpacity={0.8}
       >
         {pet.image ? (
@@ -148,10 +183,29 @@ function PetCard({ pet, index, onUpdate, onRemove, showRemove }) {
               <Ionicons name="camera" size={28} color="#A8D96C" />
             </View>
             <Text style={styles.imagePickerText}>Add Pet Photo</Text>
-            <Text style={styles.imagePickerSub}>Tap to upload from gallery</Text>
+            <Text style={styles.imagePickerSub}>Camera ya Gallery se add karo</Text>
           </View>
         )}
       </TouchableOpacity>
+
+      <PhotoSourceModal
+        visible={photoModal}
+        onClose={() => setPhotoModal(false)}
+        onCamera={async () => {
+          setPhotoModal(false);
+          const { status } = await ImagePicker.requestCameraPermissionsAsync();
+          if (status !== "granted") { Alert.alert("Permission needed", "Please allow camera access."); return; }
+          const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.7 });
+          if (!result.canceled) set("image", result.assets[0].uri);
+        }}
+        onGallery={async () => {
+          setPhotoModal(false);
+          const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (status !== "granted") { Alert.alert("Permission needed", "Please allow photo library access."); return; }
+          const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsEditing: true, aspect: [1, 1], quality: 0.7 });
+          if (!result.canceled) set("image", result.assets[0].uri);
+        }}
+      />
 
       <Label text="Pet Name" required />
       <InputBox icon="paw-outline" placeholder="Enter pet's name" value={pet.name} onChangeText={(v) => set("name", v)} />
@@ -254,19 +308,65 @@ function PetCard({ pet, index, onUpdate, onRemove, showRemove }) {
       <View style={styles.vacSection}>
         <Text style={styles.vacTitle}>💉 Vaccinations</Text>
         {pet.vaccinations.map((v, i) => (
-          <View key={i} style={styles.vacRow}>
-            <View style={[styles.inputBox, { flex: 1, marginBottom: 0 }]}>
+          <View key={i} style={styles.vacCard}>
+            <View style={styles.vacCardHeader}>
+              <Text style={styles.vacCardTitle}>Vaccine #{i + 1}</Text>
+              <TouchableOpacity style={styles.vacRemoveBtn} onPress={() => removeVaccination(i)}>
+                <Ionicons name="close" size={16} color="#C62828" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.vacLabel}>Vaccine Name</Text>
+            <View style={[styles.inputBox, { marginBottom: 8 }]}>
+              <Ionicons name="medical-outline" size={16} color="#3E7B27" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Vaccination name"
+                placeholder="e.g. Rabies, Parvovirus"
                 placeholderTextColor="#aaa"
                 value={v.name}
-                onChangeText={(val) => updateVaccination(i, val)}
+                onChangeText={(val) => updateVaccination(i, "name", val)}
               />
             </View>
-            <TouchableOpacity style={styles.vacRemoveBtn} onPress={() => removeVaccination(i)}>
-              <Ionicons name="close" size={16} color="#C62828" />
-            </TouchableOpacity>
+
+            <Text style={styles.vacLabel}>Date Given (DD/MM/YYYY)</Text>
+            <View style={[styles.inputBox, { marginBottom: 8 }]}>
+              <Ionicons name="calendar-outline" size={16} color="#3E7B27" style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="DD/MM/YYYY"
+                placeholderTextColor="#aaa"
+                value={v.date}
+                onChangeText={(val) => updateVaccination(i, "date", formatDateInput(val, v.date))}
+                keyboardType="numeric"
+                maxLength={10}
+              />
+            </View>
+
+            <Text style={styles.vacLabel}>Serial Number</Text>
+            <View style={[styles.inputBox, { marginBottom: 8 }]}>
+              <Ionicons name="barcode-outline" size={16} color="#3E7B27" style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. VAC-2024-001"
+                placeholderTextColor="#aaa"
+                value={v.serialNumber}
+                onChangeText={(val) => updateVaccination(i, "serialNumber", val)}
+              />
+            </View>
+
+            <Text style={styles.vacLabel}>Next Due Date (DD/MM/YYYY)</Text>
+            <View style={[styles.inputBox, { marginBottom: 0 }]}>
+              <Ionicons name="calendar" size={16} color="#E67E22" style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="DD/MM/YYYY"
+                placeholderTextColor="#aaa"
+                value={v.nextDueDate}
+                onChangeText={(val) => updateVaccination(i, "nextDueDate", formatDateInput(val, v.nextDueDate))}
+                keyboardType="numeric"
+                maxLength={10}
+              />
+            </View>
           </View>
         ))}
         <TouchableOpacity style={styles.addVacBtn} onPress={addVaccination} activeOpacity={0.8}>
@@ -473,14 +573,27 @@ const styles = StyleSheet.create({
     padding: 14, borderWidth: 1, borderColor: "#D4EDD4",
   },
   vacTitle: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 10 },
+  vacCard: {
+    backgroundColor: "#fff", borderRadius: 12, padding: 12,
+    marginBottom: 10, borderWidth: 1, borderColor: "#D4EDD4",
+  },
+  vacCardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
+  vacCardTitle: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+  vacLabel: { fontSize: 11, fontFamily: "Poppins_700Bold", color: "#3E7B27", marginBottom: 4, marginTop: 4 },
   vacRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
   vacRemoveBtn: {
-    width: 36, height: 36, borderRadius: 10,
+    width: 30, height: 30, borderRadius: 8,
     backgroundColor: "#FFF0F0", justifyContent: "center", alignItems: "center",
   },
   dobRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 },
   dobField: { flex: 1 },
   dobSep: { fontSize: 18, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 2 },
+  addVacBtn: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    paddingVertical: 10, justifyContent: "center",
+    borderWidth: 1, borderColor: "#A8D96C", borderRadius: 10,
+    borderStyle: "dashed", marginTop: 4,
+  },
   addVacText: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#3E7B27" },
 
   addPetBtn: {
@@ -519,4 +632,19 @@ const modal = StyleSheet.create({
     paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F0F7F0",
   },
   itemText: { fontSize: 14, fontFamily: "Inter_400Regular", color: "#1A1A1A" },
+
+  // Photo source modal
+  photoBox: {
+    backgroundColor: "#fff", borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    padding: 24, paddingBottom: 36,
+  },
+  photoTitle: { fontSize: 16, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 16, textAlign: "center" },
+  photoBtn: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    backgroundColor: "#F0F7F0", borderRadius: 12, padding: 14,
+    marginBottom: 10, borderWidth: 1, borderColor: "#D4EDD4",
+  },
+  photoBtnText: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+  photoCancel: { alignItems: "center", marginTop: 6, padding: 12 },
+  photoCancelText: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#C62828" },
 });

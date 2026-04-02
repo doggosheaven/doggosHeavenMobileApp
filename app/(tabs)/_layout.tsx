@@ -26,6 +26,6 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    backgroundColor: "#F5EDE0",
+    backgroundColor: "#F0F7F0",
   },
 });

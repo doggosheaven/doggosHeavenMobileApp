@@ -1,15 +1,25 @@
 import { useState, useEffect, useCallback } from "react";
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator, RefreshControl } from "react-native";
+import {
+  View, Text, ScrollView, StyleSheet, TouchableOpacity,
+  ActivityIndicator, RefreshControl, Alert,
+} from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import Header from "../../components/Header";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
+import { initiatePayment } from "../../utils/paymentHelper";
 
 const TYPE_CONFIG = {
-  confirmed: { icon: "checkmark-circle", color: "#3E7B27" },
-  completed: { icon: "ribbon", color: "#0B3D2E" },
-  cancelled: { icon: "close-circle", color: "#C62828" },
-  pending:   { icon: "time", color: "#F59E0B" },
+  confirmed:        { icon: "checkmark-circle", color: "#3E7B27" },
+  completed:        { icon: "ribbon",            color: "#0B3D2E" },
+  cancelled:        { icon: "close-circle",      color: "#C62828" },
+  pending:          { icon: "time",              color: "#F59E0B" },
+  visit:            { icon: "paw",               color: "#1A5C3A" },
+  blacklist:        { icon: "ban",               color: "#C62828" },
+  unblocked:        { icon: "checkmark-circle",  color: "#3E7B27" },
+  unblock_rejected: { icon: "close-circle",      color: "#C62828" },
 };
 
 const timeAgo = (dateStr) => {
@@ -24,21 +34,59 @@ const timeAgo = (dateStr) => {
 };
 
 export default function NotificationsScreen() {
+  const router = useRouter();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [readIds, setReadIds] = useState(new Set());
+  const [payingId, setPayingId] = useState(null);
+  const [authData, setAuthData] = useState({ user: null, token: null });
+  const STORAGE_KEY = "notif_read_ids";
+
+  // Load persisted read IDs from AsyncStorage
+  const loadReadIds = async () => {
+    try {
+      const stored = await AsyncStorage.getItem(STORAGE_KEY);
+      if (stored) return new Set(JSON.parse(stored));
+    } catch (_) {}
+    return new Set();
+  };
+
+  // Save read IDs to AsyncStorage
+  const saveReadIds = async (ids) => {
+    try {
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify([...ids]));
+    } catch (_) {}
+  };
 
   const fetchNotifications = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     try {
       const { user, token } = await getAuth();
+      setAuthData({ user, token });
       if (!user?.id) return;
-      const res = await fetch(`${BASE_URL}/api/v1/customerappointment/notifications/${user.id}`, {
-        headers: { Authorization: token || "" },
-      });
+      const [res, persistedIds] = await Promise.all([
+        fetch(`${BASE_URL}/api/v1/customerappointment/notifications/${user.id}`, {
+          headers: { Authorization: token || "" },
+        }),
+        loadReadIds(),
+      ]);
       const data = await res.json();
-      if (data.success) setNotifications(data.notifications || []);
+      if (data.success) {
+        const notifs = data.notifications || [];
+        setNotifications(notifs);
+        // Mark visit notifications as read on server
+        fetch(`${BASE_URL}/api/v1/customerappointment/notifications/${user.id}/markread`, {
+          method: "PATCH",
+          headers: { Authorization: token || "" },
+        }).catch(() => {});
+        // Merge: visit notifs (server read) + persisted appointment read IDs
+        const visitReadIds = notifs
+          .filter((n) => n.source === "visit" && n.read !== false)
+          .map((n) => String(n.id));
+        const merged = new Set([...persistedIds, ...visitReadIds]);
+        setReadIds(merged);
+      }
     } catch (e) {
       console.log(e);
     } finally {
@@ -49,11 +97,61 @@ export default function NotificationsScreen() {
 
   useEffect(() => { fetchNotifications(); }, []);
 
-  const markRead = (id) => setReadIds((prev) => new Set([...prev, id]));
-  const markAllRead = () => setReadIds(new Set(notifications.map((n) => n.id)));
+  const markRead = (id) => {
+    setReadIds((prev) => {
+      const next = new Set([...prev, String(id)]);
+      saveReadIds(next);
+      return next;
+    });
+  };
+
+  const markAllRead = () => {
+    setReadIds((prev) => {
+      const next = new Set(notifications.map((n) => String(n.id)));
+      saveReadIds(next);
+      return next;
+    });
+  };
 
   const isRead = (id) => readIds.has(String(id));
   const unreadCount = notifications.filter((n) => !isRead(n.id)).length;
+
+  const handlePayNow = async (notif, apptId, amount) => {
+    setPayingId(notif.id);
+    try {
+      const { token } = authData;
+      const res = await fetch(`${BASE_URL}/api/v1/customerappointment/getaappointbyid/${apptId}`, {
+        headers: { Authorization: token || "" },
+      });
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); } catch { throw new Error("Server error. Please try again."); }
+      if (!data.success) throw new Error(data.message);
+      const appt = data.data;
+      if (appt.paymentStatus === "paid") {
+        Alert.alert("Already Paid", "This appointment has already been paid.");
+        return;
+      }
+      const finalAmount = appt.totalAmount || amount;
+      if (!finalAmount || finalAmount <= 0) {
+        Alert.alert("Error", "Payment amount not set. Please contact staff.");
+        return;
+      }
+      await initiatePayment({
+        appointmentId: appt._id,
+        amount: finalAmount,
+        serviceName: appt.serviceName,
+        user: authData.user,
+        token,
+        onSuccess: () => fetchNotifications(true),
+        onRefresh: () => fetchNotifications(true),
+      });
+    } catch (e) {
+      Alert.alert("Error", e.message || "Something went wrong");
+    } finally {
+      setPayingId(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -93,11 +191,35 @@ export default function NotificationsScreen() {
           notifications.map((notif) => {
             const config = TYPE_CONFIG[notif.type] || TYPE_CONFIG.pending;
             const read = isRead(notif.id);
+
+            // Case 1: Appointment confirmed (source=appointment, type=confirmed)
+            const isApptConfirmed = notif.source === "appointment" &&
+              notif.type === "confirmed" &&
+              notif.paymentStatus !== "paid";
+
+            // Case 2: Staff ne custom amount set karke confirm kiya (source=visit, purpose=confirmed)
+            const isVisitConfirmed = notif.source === "visit" &&
+              notif.purpose === "confirmed" &&
+              !!notif.appointmentId;
+
+            const showPayBtn = (isApptConfirmed || isVisitConfirmed) &&
+              Number(notif.amount) > 0;
+
+            const payAmount = Number(notif.amount) || 0;
+            const payApptId = notif.source === "visit" ? notif.appointmentId : String(notif.id);
             return (
               <TouchableOpacity
                 key={String(notif.id)}
                 style={[styles.card, !read && styles.cardUnread]}
-                onPress={() => markRead(notif.id)}
+                onPress={() => {
+                  markRead(notif.id);
+                  if (notif.source === "visit" && notif.visitId) {
+                    router.push({
+                      pathname: "/screens/visitdetail",
+                      params: { visitId: notif.visitId, purpose: notif.purpose, petName: notif.petName },
+                    });
+                  }
+                }}
                 activeOpacity={0.8}
               >
                 <View style={[styles.iconBox, { backgroundColor: config.color }]}>
@@ -109,7 +231,42 @@ export default function NotificationsScreen() {
                     {!read && <View style={styles.unreadDot} />}
                   </View>
                   <Text style={styles.cardBody}>{notif.body}</Text>
+                  {notif.amount > 0 && notif.type === "confirmed" && (
+                    <Text style={styles.amountText}>Amount: ₹{notif.amount}</Text>
+                  )}
                   <Text style={styles.cardTime}>{timeAgo(notif.time)}</Text>
+
+                  {showPayBtn && (
+                    <TouchableOpacity
+                      style={styles.payBtn}
+                      onPress={() => handlePayNow(notif, payApptId, payAmount)}
+                      activeOpacity={0.8}
+                      disabled={payingId === notif.id}
+                    >
+                      {payingId === notif.id ? (
+                        <ActivityIndicator size="small" color="#0B3D2E" />
+                      ) : (
+                        <>
+                          <Ionicons name="card" size={15} color="#0B3D2E" />
+                          <Text style={styles.payBtnText}>Pay Now ₹{payAmount}</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  )}
+
+                  {notif.type === "confirmed" && notif.paymentStatus === "paid" && (
+                    <View style={styles.paidBadge}>
+                      <Ionicons name="checkmark-circle" size={13} color="#2E7D32" />
+                      <Text style={styles.paidText}>Payment Done</Text>
+                    </View>
+                  )}
+
+                  {notif.source === "visit" && notif.visitId && (
+                    <View style={styles.viewDetailHint}>
+                      <Ionicons name="eye-outline" size={13} color="#1A5C3A" />
+                      <Text style={styles.viewDetailHintTxt}>Tap to view visit details</Text>
+                    </View>
+                  )}
                 </View>
               </TouchableOpacity>
             );
@@ -144,6 +301,26 @@ const styles = StyleSheet.create({
   cardTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 },
   cardTitle: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#0B3D2E", flex: 1 },
   unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#3E7B27", marginLeft: 8 },
-  cardBody: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#555", lineHeight: 18, marginBottom: 6 },
-  cardTime: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#999" },
+  cardBody: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#555", lineHeight: 18, marginBottom: 4 },
+  amountText: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 4 },
+  cardTime: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#999", marginBottom: 8 },
+
+  payBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    backgroundColor: "#A8D96C", borderRadius: 10,
+    paddingVertical: 10, paddingHorizontal: 16,
+  },
+  payBtnText: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+
+  paidBadge: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    backgroundColor: "#E8F5E8", alignSelf: "flex-start",
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20,
+  },
+  paidText: { fontSize: 11, fontFamily: "Poppins_700Bold", color: "#2E7D32" },
+
+  viewDetailHint: {
+    flexDirection: "row", alignItems: "center", gap: 4, marginTop: 6,
+  },
+  viewDetailHintTxt: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#1A5C3A" },
 });

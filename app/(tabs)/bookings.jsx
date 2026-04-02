@@ -4,9 +4,11 @@ import {
   RefreshControl, Alert, ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import Header from "../../components/Header";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
+import { initiatePayment, calcGST } from "../../utils/paymentHelper";
 
 const STATUS_CONFIG = {
   pending:   { label: "Pending",   bg: "#FFF9E6", color: "#B8860B", icon: "⏳" },
@@ -24,11 +26,14 @@ export default function BookingsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState("All");
   const [token, setToken] = useState(null);
+  const [user, setUser] = useState(null);
+  const [payingId, setPayingId] = useState(null);
 
   const loadAppointments = useCallback(async () => {
     try {
       const { user: u, token: t } = await getAuth();
       setToken(t);
+      setUser(u);
       const res = await fetch(`${BASE_URL}/api/v1/customerappointment/getcustomerappoint/${u?.id}`, {
         headers: { Authorization: t || "" },
       });
@@ -44,6 +49,21 @@ export default function BookingsScreen() {
 
   useEffect(() => { loadAppointments(); }, []);
   const onRefresh = () => { setRefreshing(true); loadAppointments(); };
+
+  const handlePayNow = async (appt) => {
+    setPayingId(appt._id);
+    await initiatePayment({
+      appointmentId: appt._id,
+      amount: appt.totalAmount,
+      paymentMethod: appt.paymentMode || "online",
+      serviceName: appt.serviceName,
+      user,
+      token,
+      onSuccess: loadAppointments,
+      onRefresh: loadAppointments,
+    });
+    setPayingId(null);
+  };
 
   const handleCancel = (id) => {
     Alert.alert("Cancel Appointment", "Are you sure you want to cancel?", [
@@ -81,7 +101,9 @@ export default function BookingsScreen() {
   });
 
   const formatTime = (t) => {
+    if (!t) return "N/A";
     const [h, m] = t.split(":");
+    if (!h || !m) return t;
     const date = new Date();
     date.setHours(+h, +m);
     return date.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true });
@@ -89,7 +111,7 @@ export default function BookingsScreen() {
 
   return (
     <View style={styles.container}>
-      <Header title="My Bookings" />
+      <Header title="All Bookings" />
 
       {/* Filter Tabs */}
       <ScrollView
@@ -117,7 +139,7 @@ export default function BookingsScreen() {
         {/* New Booking Button */}
         <TouchableOpacity
           style={styles.newBookingBtn}
-          onPress={() => router.navigate({ pathname: "/(tabs)/home", params: { scrollToServices: "true" } })}
+          onPress={() => router.navigate("/(tabs)/services")}
           activeOpacity={0.8}
         >
           <View style={styles.newBookingIconBox}>
@@ -191,12 +213,15 @@ export default function BookingsScreen() {
                     <Text style={styles.detailIcon}>🕐</Text>
                     <Text style={styles.detailText}>{formatTime(appt.appointmentTime)}</Text>
                   </View>
-                  {appt.totalAmount > 0 && (
-                    <View style={styles.detailItem}>
-                      <Text style={styles.detailIcon}>💰</Text>
-                      <Text style={styles.detailText}>₹{appt.totalAmount}</Text>
-                    </View>
-                  )}
+                  {appt.totalAmount > 0 && (() => {
+                    const { gst, total } = calcGST(appt.totalAmount, appt.paymentMode || "online");
+                    return (
+                      <View style={styles.detailItem}>
+                        <Text style={styles.detailIcon}>💰</Text>
+                        <Text style={styles.detailText}>₹{total} <Text style={{ color: "#B8860B", fontSize: 10 }}>(+₹{gst} GST)</Text></Text>
+                      </View>
+                    );
+                  })()}
                 </View>
 
                 {/* Pet Info */}
@@ -213,6 +238,39 @@ export default function BookingsScreen() {
                     <Text style={styles.notesText}>📝 {appt.notes}</Text>
                   </View>
                 ) : null}
+
+                {/* Pay Now Banner */}
+                {appt.status === "confirmed" && appt.paymentStatus !== "paid" && (() => {
+                  const { gst, total } = calcGST(appt.totalAmount, appt.paymentMode || "online");
+                  return (
+                    <TouchableOpacity
+                      style={styles.payBanner}
+                      onPress={() => handlePayNow(appt)}
+                      activeOpacity={0.8}
+                      disabled={payingId === appt._id}
+                    >
+                      {payingId === appt._id ? (
+                        <ActivityIndicator size="small" color="#0B3D2E" style={{ marginRight: 8 }} />
+                      ) : (
+                        <Ionicons name="card" size={16} color="#0B3D2E" />
+                      )}
+                      <View style={styles.payBannerInfo}>
+                        <Text style={styles.payBannerTitle}>
+                          {payingId === appt._id ? "Opening Payment..." : "Payment Pending"}
+                        </Text>
+                        <Text style={styles.payBannerSub}>Pay ₹{total} (base ₹{appt.totalAmount} + GST ₹{gst})</Text>
+                      </View>
+                      {payingId !== appt._id && <Text style={styles.payBannerArrow}>Pay →</Text>}
+                    </TouchableOpacity>
+                  );
+                })()}
+
+                {appt.status === "confirmed" && appt.paymentStatus === "paid" && (
+                  <View style={styles.paidBanner}>
+                    <Ionicons name="checkmark-circle" size={16} color="#2E7D32" />
+                    <Text style={styles.paidBannerText}>Payment Completed ✅</Text>
+                  </View>
+                )}
 
                 {/* Cancel Button */}
                 {(appt.status === "pending" || appt.status === "confirmed") && (
@@ -323,6 +381,21 @@ const styles = StyleSheet.create({
     paddingVertical: 10, alignItems: "center", marginBottom: 10,
   },
   cancelText: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#C62828" },
+
+  payBanner: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    backgroundColor: "#A8D96C", borderRadius: 12, padding: 12, marginBottom: 10,
+  },
+  payBannerInfo: { flex: 1 },
+  payBannerTitle: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+  payBannerSub: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#1A5C3A", marginTop: 2 },
+  payBannerArrow: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+
+  paidBanner: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: "#E8F5E8", borderRadius: 12, padding: 10, marginBottom: 10,
+  },
+  paidBannerText: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#2E7D32" },
 
   bookingId: { fontSize: 10, fontFamily: "Inter_400Regular", color: "#bbb", textAlign: "right" },
 });

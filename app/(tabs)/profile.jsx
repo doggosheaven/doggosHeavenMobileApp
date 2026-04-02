@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useState, useCallback } from "react";
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
   Alert, ActivityIndicator, Modal, Dimensions, Image,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import Header from "../../components/Header";
 import { getAuth, clearAuth } from "../../utils/authStorage";
@@ -16,15 +17,17 @@ export default function ProfileScreen() {
   const [petsLoading, setPetsLoading] = useState(false);
   const [showComingSoon, setShowComingSoon] = useState(false);
 
-  useEffect(() => {
-    loadProfile();
-  }, []);
-
-  const loadProfile = async () => {
+  const loadProfile = useCallback(async () => {
     const { user: u, token } = await getAuth();
     setUser(u);
     if (u?.email) fetchPets(u.email, token);
-  };
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadProfile();
+    }, [loadProfile])
+  );
 
   const fetchPets = async (email, token) => {
     setPetsLoading(true);
@@ -79,6 +82,9 @@ export default function ProfileScreen() {
     { icon: "star-outline", label: "Rate Us", onPress: () => setShowComingSoon(true) },
     { icon: "help-circle-outline", label: "Help & Support", onPress: () => router.push("/screens/helpsupport") },
     { icon: "shield-checkmark-outline", label: "Privacy Policy", onPress: () => router.push("/screens/privacypolicy") },
+    { icon: "reader-outline", label: "Terms & Conditions", onPress: () => router.push("/screens/termsandconditions") },
+    { icon: "return-up-back-outline", label: "Refund Policy", onPress: () => router.push("/screens/refundpolicy") },
+    { icon: "bag-handle-outline", label: "Shipping & Delivery", onPress: () => router.push("/screens/shippingdelivery") },
   ];
 
   return (
@@ -89,9 +95,13 @@ export default function ProfileScreen() {
         {/* Avatar Card */}
         <View style={styles.avatarCard}>
           <TouchableOpacity style={styles.avatarWrapper} onPress={() => router.push("/screens/editprofile")} activeOpacity={0.8}>
-            <View style={styles.avatarCircle}>
-              <Text style={styles.avatarText}>{getInitials(user?.fullName)}</Text>
-            </View>
+            {user?.profileImage ? (
+              <Image source={{ uri: user.profileImage }} style={styles.avatarImage} />
+            ) : (
+              <View style={styles.avatarCircle}>
+                <Text style={styles.avatarText}>{getInitials(user?.fullName)}</Text>
+              </View>
+            )}
             <View style={styles.editIconBadge}>
               <Ionicons name="pencil" size={12} color="#0B3D2E" />
             </View>
@@ -99,7 +109,8 @@ export default function ProfileScreen() {
           <Text style={styles.userName}>{user?.fullName || "Pet Parent"}</Text>
           <Text style={styles.userEmail}>{user?.email || ""}</Text>
           <View style={styles.roleBadge}>
-            <Text style={styles.roleText}>🐾 Pet Parent</Text>
+            <Ionicons name="hand-left" size={14} color="#A8D96C" />
+            <Text style={styles.roleText}>Pet Parent</Text>
           </View>
         </View>
 
@@ -117,7 +128,7 @@ export default function ProfileScreen() {
             <ActivityIndicator size="small" color="#0B3D2E" style={{ marginVertical: 16 }} />
           ) : pets.length === 0 ? (
             <TouchableOpacity style={styles.emptyPets} onPress={() => router.push("/(tabs)/Pet/PetForm")}>
-              <Ionicons name="paw-outline" size={32} color="#A8D96C" />
+            <Ionicons name="hand-left-outline" size={32} color="#3E7B27" />
               <Text style={styles.emptyPetsText}>No pets registered yet</Text>
               <Text style={styles.emptyPetsSub}>Tap to add your first pet</Text>
             </TouchableOpacity>
@@ -150,7 +161,7 @@ export default function ProfileScreen() {
                 </View>
                 {pets.length > 3 && (
                   <TouchableOpacity style={styles.viewAllPetsBtn} onPress={() => router.push("/screens/mypets")} activeOpacity={0.8}>
-                    <Ionicons name="paw-outline" size={16} color="#0B3D2E" />
+                    <Ionicons name="heart-outline" size={16} color="#0B3D2E" />
                     <Text style={styles.viewAllPetsText}>View All Pets ({pets.length})</Text>
                     <Ionicons name="chevron-forward" size={16} color="#0B3D2E" />
                   </TouchableOpacity>
@@ -221,6 +232,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#A8D96C",
     justifyContent: "center", alignItems: "center",
   },
+  avatarImage: {
+    width: 80, height: 80, borderRadius: 40,
+  },
   editIconBadge: {
     position: "absolute", bottom: 0, right: 0,
     width: 24, height: 24, borderRadius: 12,
@@ -234,6 +248,7 @@ const styles = StyleSheet.create({
   roleBadge: {
     backgroundColor: "rgba(168,217,108,0.2)",
     paddingHorizontal: 14, paddingVertical: 5, borderRadius: 20,
+    flexDirection: "row", alignItems: "center", gap: 6,
   },
   roleText: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
 

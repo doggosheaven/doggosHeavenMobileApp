@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  ActivityIndicator, RefreshControl,
+  ActivityIndicator, RefreshControl, Image, Modal, TextInput, Alert,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -14,14 +14,19 @@ export default function MyPetsScreen() {
   const [pets, setPets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [token, setToken] = useState("");
+  const [unblockModal, setUnblockModal] = useState(null); // pet object
+  const [unblockReason, setUnblockReason] = useState("");
+  const [unblockLoading, setUnblockLoading] = useState(false);
 
   const fetchPets = async () => {
     try {
-      const { user, token } = await getAuth();
+      const { user, token: t } = await getAuth();
+      setToken(t || "");
       const encodedEmail = encodeURIComponent(user?.email || "");
       const res = await fetch(
         `${BASE_URL}/api/v1/customerappointment/getcustomerpets?email=${encodedEmail}`,
-        { headers: { Authorization: token || "" } }
+        { headers: { Authorization: t || "" } }
       );
       const data = await res.json();
       if (data.success) setPets(data.pets || []);
@@ -31,6 +36,28 @@ export default function MyPetsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
+  };
+
+  const handleUnblockRequest = async () => {
+    if (!unblockReason.trim())
+      return Alert.alert("Required", "Please explain why you want to unblock your pet.");
+    setUnblockLoading(true);
+    try {
+      const res = await fetch(`${BASE_URL}/api/v1/pet/unblock-request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: token },
+        body: JSON.stringify({ petId: unblockModal._id, reason: unblockReason.trim() }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setUnblockModal(null);
+        setUnblockReason("");
+        Alert.alert("✅ Request Sent", "Your unblock request has been sent to the admin. You will be notified once it is reviewed.");
+      } else {
+        Alert.alert("Error", data.message || "Could not submit request.");
+      }
+    } catch { Alert.alert("Error", "Network error."); }
+    finally { setUnblockLoading(false); }
   };
 
   useEffect(() => { fetchPets(); }, []);
@@ -86,9 +113,13 @@ export default function MyPetsScreen() {
             <View key={i} style={styles.petCard}>
               {/* Card Header */}
               <View style={styles.cardHeader}>
-                <View style={styles.petAvatar}>
-                  <Text style={styles.petAvatarText}>{pet.name?.[0]?.toUpperCase() || "P"}</Text>
-                </View>
+                {pet.image ? (
+                  <Image source={{ uri: pet.image }} style={styles.petAvatarImg} />
+                ) : (
+                  <View style={styles.petAvatar}>
+                    <Text style={styles.petAvatarText}>{pet.name?.[0]?.toUpperCase() || "P"}</Text>
+                  </View>
+                )}
                 <View style={styles.petHeaderInfo}>
                   <Text style={styles.petName}>{pet.name}</Text>
                   <Text style={styles.petBreed}>{pet.breed || "Mixed Breed"}</Text>
@@ -96,6 +127,13 @@ export default function MyPetsScreen() {
                 <View style={styles.ageBadge}>
                   <Text style={styles.ageText}>{calculateAge(pet.dob)}</Text>
                 </View>
+                <TouchableOpacity
+                  style={styles.editBtn}
+                  onPress={() => router.push({ pathname: "/(tabs)/../screens/editpet", params: { petId: pet._id, pet: JSON.stringify(pet) } })}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="pencil" size={15} color="#0B3D2E" />
+                </TouchableOpacity>
               </View>
 
               <View style={styles.divider} />
@@ -149,18 +187,92 @@ export default function MyPetsScreen() {
               )}
 
               {/* Book Service */}
-              <TouchableOpacity
-                style={styles.bookBtn}
-                onPress={() => router.push("/(tabs)/services")}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="calendar-outline" size={16} color="#fff" />
-                <Text style={styles.bookBtnText}>Book a Service</Text>
-              </TouchableOpacity>
+              {pet.isBlacklisted ? (
+                <View style={styles.bookBtnDisabled}>
+                  <Ionicons name="ban" size={16} color="#C62828" />
+                  <Text style={styles.bookBtnDisabledText}>Booking Disabled (Blacklisted)</Text>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={styles.bookBtn}
+                  onPress={() => router.push("/(tabs)/services")}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="calendar-outline" size={16} color="#fff" />
+                  <Text style={styles.bookBtnText}>Book a Service</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Blacklist Banner + Unblock Request */}
+              {pet.isBlacklisted && (
+                <View style={styles.blacklistBox}>
+                  <View style={styles.blacklistHeader}>
+                    <Ionicons name="ban" size={16} color="#C62828" />
+                    <Text style={styles.blacklistTitle}>This pet is blacklisted</Text>
+                  </View>
+                  {pet.blacklistReason ? (
+                    <Text style={styles.blacklistReason}>Reason: {pet.blacklistReason}</Text>
+                  ) : null}
+                  <TouchableOpacity
+                    style={styles.unblockBtn}
+                    onPress={() => { setUnblockModal(pet); setUnblockReason(""); }}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="mail-outline" size={15} color="#0B3D2E" />
+                    <Text style={styles.unblockBtnText}>Request Unblock</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
           ))
         )}
       </ScrollView>
+
+      {/* Unblock Request Modal */}
+      <Modal visible={!!unblockModal} transparent animationType="slide" onRequestClose={() => setUnblockModal(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Request Unblock</Text>
+              <TouchableOpacity onPress={() => setUnblockModal(null)}>
+                <Ionicons name="close" size={22} color="#0B3D2E" />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.modalPetName}>Pet: {unblockModal?.name}</Text>
+            <Text style={styles.modalLabel}>Why should your pet be unblocked? *</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Explain your reason in detail. This will be reviewed by admin only."
+              placeholderTextColor="#aaa"
+              value={unblockReason}
+              onChangeText={setUnblockReason}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+            <View style={styles.modalNote}>
+              <Ionicons name="shield-checkmark-outline" size={14} color="#3E7B27" />
+              <Text style={styles.modalNoteText}>Your request will be sent directly to admin only. Staff cannot see this.</Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.modalSubmitBtn, unblockLoading && { opacity: 0.6 }]}
+              onPress={handleUnblockRequest}
+              disabled={unblockLoading}
+              activeOpacity={0.8}
+            >
+              {unblockLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <Ionicons name="send" size={16} color="#fff" />
+                  <Text style={styles.modalSubmitText}>Send Request to Admin</Text>
+                </>
+              )}
+            </TouchableOpacity>
+            <View style={{ height: 20 }} />
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -205,6 +317,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#A8D96C",
     justifyContent: "center", alignItems: "center", marginRight: 12,
   },
+  petAvatarImg: {
+    width: 52, height: 52, borderRadius: 26, marginRight: 12,
+  },
   petAvatarText: { fontSize: 22, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
   petHeaderInfo: { flex: 1 },
   petName: { fontSize: 17, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 2 },
@@ -213,6 +328,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#E8F5E8", paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20,
   },
   ageText: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#3E7B27" },
+  editBtn: {
+    width: 34, height: 34, borderRadius: 10,
+    backgroundColor: "#A8D96C",
+    justifyContent: "center", alignItems: "center", marginLeft: 8,
+  },
 
   divider: { height: 1, backgroundColor: "#E8F5E8", marginVertical: 12 },
 
@@ -238,4 +358,48 @@ const styles = StyleSheet.create({
     backgroundColor: "#0B3D2E", borderRadius: 12, padding: 12, marginTop: 12,
   },
   bookBtnText: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#fff" },
+  bookBtnDisabled: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    backgroundColor: "#FFF5F5", borderRadius: 12, padding: 12, marginTop: 12,
+    borderWidth: 1.5, borderColor: "#FFCDD2",
+  },
+  bookBtnDisabledText: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#C62828" },
+
+  blacklistBox: {
+    marginTop: 12, backgroundColor: "#FFF5F5", borderRadius: 12,
+    padding: 12, borderWidth: 1.5, borderColor: "#FFCDD2",
+  },
+  blacklistHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 },
+  blacklistTitle: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#C62828" },
+  blacklistReason: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#C62828", marginBottom: 10 },
+  unblockBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    backgroundColor: "#A8D96C", borderRadius: 10, paddingVertical: 10,
+  },
+  unblockBtnText: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
+  modalSheet: {
+    backgroundColor: "#fff", borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    padding: 20, paddingBottom: 10,
+  },
+  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  modalTitle: { fontSize: 17, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+  modalPetName: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#C62828", marginBottom: 12 },
+  modalLabel: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 8 },
+  modalInput: {
+    backgroundColor: "#F0F7F0", borderRadius: 12, padding: 12,
+    fontSize: 13, fontFamily: "Inter_400Regular", color: "#1A1A1A",
+    borderWidth: 1, borderColor: "#D4EDD4", minHeight: 100, marginBottom: 12,
+  },
+  modalNote: {
+    flexDirection: "row", alignItems: "flex-start", gap: 6,
+    backgroundColor: "#E8F5E8", borderRadius: 10, padding: 10, marginBottom: 14,
+  },
+  modalNoteText: { flex: 1, fontSize: 11, fontFamily: "Inter_400Regular", color: "#3E7B27", lineHeight: 16 },
+  modalSubmitBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    backgroundColor: "#0B3D2E", borderRadius: 14, paddingVertical: 14,
+  },
+  modalSubmitText: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
 });

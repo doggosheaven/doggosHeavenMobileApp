@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  FlatList, ActivityIndicator, RefreshControl,
+  FlatList, RefreshControl,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -9,24 +9,27 @@ import Header from "../../components/Header";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
 
-const SERVICE_ICONS = {
-  Grooming: "cut-outline", Hostel: "home-outline", "Day School": "school-outline",
-  "Day Care": "sunny-outline", "Play School": "game-controller-outline",
-  Veterinary: "medkit-outline", "Dog Park": "leaf-outline",
-};
 const SERVICE_EMOJIS = {
   Grooming: "✂️", Hostel: "🏠", "Day School": "🎓",
   "Day Care": "🌞", "Play School": "🎮", Veterinary: "🩺", "Dog Park": "🌳",
+  Boarding: "🏠", "Day Boarding": "🌞", "Boarding Wallet (15 days)": "💳",
+  "Day School (26 days)": "🎓", "Play School (26 days)": "🎮",
+  "Grooming (small breed)": "✂️", "Grooming (large breed)": "✂️",
+  "Full Grooming (small breed)": "🛁", "Full Grooming (large breed)": "🛁",
+  "Oil Massage": "💆",
 };
 
 const FALLBACK_SERVICES = [
-  { _id: "1", purpose: "Grooming", price: 900, halfdayprice: null, isSubscriptionAvailable: true, detail: "Bath, trim, nail clipping & ear cleaning" },
-  { _id: "2", purpose: "Hostel", price: 1000, halfdayprice: 500, isSubscriptionAvailable: true, detail: "Overnight stay with meals & care" },
-  { _id: "3", purpose: "Day School", price: 350, halfdayprice: null, isSubscriptionAvailable: false, detail: "Training & socializing for your pet" },
-  { _id: "4", purpose: "Day Care", price: 600, halfdayprice: null, isSubscriptionAvailable: false, detail: "Full day supervised care & play" },
-  { _id: "5", purpose: "Play School", price: 500, halfdayprice: null, isSubscriptionAvailable: true, detail: "Fun activities & early training" },
-  { _id: "6", purpose: "Veterinary", price: null, halfdayprice: null, consultationPricePvt: 400, isSubscriptionAvailable: false, detail: "Expert vet consultation & checkup" },
-  { _id: "7", purpose: "Dog Park", price: 667, halfdayprice: null, isSubscriptionAvailable: false, detail: "Open play area for your dog" },
+  { _id: "1", purpose: "Boarding", price: 900, halfdayprice: null, isSubscriptionAvailable: false, subscriptionPrice: 820, detail: "Overnight stay with meals & care" },
+  { _id: "2", purpose: "Day Boarding", price: 600, halfdayprice: null, isSubscriptionAvailable: false, detail: "Full day supervised care & play" },
+  { _id: "3", purpose: "Boarding Wallet (15 days)", price: 11500, halfdayprice: null, isSubscriptionAvailable: false, detail: "15-day boarding package at a great value" },
+  { _id: "4", purpose: "Day School (26 days)", price: 13650, halfdayprice: null, isSubscriptionAvailable: false, detail: "26-day training & socializing program" },
+  { _id: "5", purpose: "Play School (26 days)", price: 9650, halfdayprice: null, isSubscriptionAvailable: false, detail: "26-day fun activities & early training" },
+  { _id: "6", purpose: "Grooming (small breed)", price: 800, halfdayprice: null, isSubscriptionAvailable: false, detail: "Bath, trim & nail clipping for small breeds" },
+  { _id: "7", purpose: "Grooming (large breed)", price: 900, halfdayprice: null, isSubscriptionAvailable: false, detail: "Bath, trim & nail clipping for large breeds" },
+  { _id: "8", purpose: "Full Grooming (small breed)", price: 1500, halfdayprice: null, isSubscriptionAvailable: false, detail: "Complete grooming package for small breeds" },
+  { _id: "9", purpose: "Full Grooming (large breed)", price: 1600, halfdayprice: null, isSubscriptionAvailable: false, detail: "Complete grooming package for large breeds" },
+  { _id: "10", purpose: "Oil Massage", price: 250, halfdayprice: null, isSubscriptionAvailable: false, detail: "Relaxing oil massage for your pet" },
 ];
 
 const EXCLUDED = ["Buy Subscription", "Shop", "Inquiry"];
@@ -59,8 +62,36 @@ export default function ServicesScreen() {
 
   const handleBook = (service) => {
     router.push({
-      pathname: "/(tabs)/bookings",
-      params: { serviceId: service._id, serviceName: service.purpose }
+      pathname: "/screens/bookingform",
+      params: {
+        serviceId: service._id,
+        serviceName: service.purpose,
+        serviceEmoji: service.emoji || "🐾",
+        servicePrice: service.price || 0,
+        serviceHalfPrice: service.halfdayprice || 0,
+        serviceConsultPrice: service.consultationPricePvt || 0,
+        serviceDescription: service.description || "",
+        servicePriceTiers: service.priceTiers?.length ? encodeURIComponent(JSON.stringify(service.priceTiers)) : "",
+      }
+    });
+  };
+
+  const handleViewDetail = (service) => {
+    router.push({
+      pathname: "/screens/servicedetail",
+      params: {
+        serviceId: service._id,
+        serviceName: service.purpose,
+        serviceEmoji: service.emoji || SERVICE_EMOJIS[service.purpose] || "🐾",
+        servicePrice: service.price || 0,
+        serviceHalfPrice: service.halfdayprice || 0,
+        serviceConsultPrice: service.consultationPricePvt || 0,
+        serviceDescription: service.description || service.detail || "",
+        servicePriceTiers: service.priceTiers?.length ? encodeURIComponent(JSON.stringify(service.priceTiers)) : "",
+        serviceSubscriptionPrice: service.subscriptionPrice || 0,
+        serviceCustomFields: service.customFields?.length ? encodeURIComponent(JSON.stringify(service.customFields)) : "",
+        isSubscriptionAvailable: service.isSubscriptionAvailable ? "true" : "false",
+      }
     });
   };
 
@@ -80,15 +111,15 @@ export default function ServicesScreen() {
           </View>
         }
         renderItem={({ item: service }) => (
-          <View style={styles.card}>
+          <TouchableOpacity style={styles.card} onPress={() => handleViewDetail(service)} activeOpacity={0.88}>
             {/* Top Row */}
             <View style={styles.cardTop}>
               <View style={styles.iconBox}>
-                <Text style={styles.iconEmoji}>{SERVICE_EMOJIS[service.purpose] || "🐾"}</Text>
+                <Text style={styles.iconEmoji}>{service.emoji || SERVICE_EMOJIS[service.purpose] || "🐾"}</Text>
               </View>
               <View style={styles.cardInfo}>
                 <Text style={styles.serviceName}>{service.purpose}</Text>
-                <Text style={styles.serviceDetail}>{service.detail || "Professional pet care service"}</Text>
+                <Text style={styles.serviceDetail}>{service.description || service.detail || "Professional pet care service"}</Text>
                 {service.isSubscriptionAvailable && (
                   <View style={styles.subBadge}>
                     <Ionicons name="checkmark-circle" size={12} color="#3E7B27" />
@@ -96,6 +127,7 @@ export default function ServicesScreen() {
                   </View>
                 )}
               </View>
+              <Ionicons name="chevron-forward" size={18} color="#A8D96C" />
             </View>
 
             <View style={styles.divider} />
@@ -103,34 +135,48 @@ export default function ServicesScreen() {
             {/* Price + Button Row */}
             <View style={styles.bottomRow}>
               <View style={styles.priceSection}>
-                {service.price ? (
+                {service.priceTiers?.length > 0 && service.priceTiers.map((t, i) => (
+                  <View key={i} style={styles.priceChip}>
+                    <Text style={styles.priceLabel}>{t.label}</Text>
+                    <Text style={styles.priceValue}>₹{t.price}</Text>
+                  </View>
+                ))}
+                {!service.priceTiers?.length && service.price ? (
                   <View style={styles.priceChip}>
-                    <Text style={styles.priceLabel}>Full Day</Text>
+                    <Text style={styles.priceLabel}>Price</Text>
                     <Text style={styles.priceValue}>₹{service.price}</Text>
                   </View>
                 ) : null}
-                {service.halfdayprice ? (
+                {!service.priceTiers?.length && service.halfdayprice ? (
                   <View style={styles.priceChip}>
                     <Text style={styles.priceLabel}>Half Day</Text>
                     <Text style={styles.priceValue}>₹{service.halfdayprice}</Text>
                   </View>
                 ) : null}
-                {service.consultationPricePvt ? (
-                  <View style={styles.priceChip}>
-                    <Text style={styles.priceLabel}>Consult</Text>
-                    <Text style={styles.priceValue}>₹{service.consultationPricePvt}</Text>
-                  </View>
-                ) : null}
-                {!service.price && !service.halfdayprice && !service.consultationPricePvt && (
+                {!service.priceTiers?.length && !service.price && !service.halfdayprice && !service.consultationPricePvt && (
                   <Text style={styles.priceNA}>Price on request</Text>
                 )}
               </View>
-              <TouchableOpacity style={styles.reserveBtn} onPress={() => handleBook(service)} activeOpacity={0.8}>
+              <TouchableOpacity
+                style={styles.reserveBtn}
+                onPress={(e) => { e.stopPropagation?.(); handleBook(service); }}
+                activeOpacity={0.8}
+              >
                 <Text style={styles.reserveBtnText}>Reserve</Text>
                 <Ionicons name="arrow-forward" size={14} color="#fff" />
               </TouchableOpacity>
             </View>
-          </View>
+
+            {service.subscriptionPrice ? (
+              <View style={styles.subscriptionRow}>
+                <View style={styles.subscriptionLeft}>
+                  <Ionicons name="checkmark-circle" size={14} color="#3E7B27" />
+                  <Text style={styles.subscriptionLabel}>Subscription available</Text>
+                </View>
+                <Text style={styles.subscriptionPrice}>₹{service.subscriptionPrice}/day</Text>
+              </View>
+            ) : null}
+          </TouchableOpacity>
         )}
       />
     </View>
@@ -187,4 +233,24 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   reserveBtnText: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#fff" },
+
+  subscriptionRow: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    backgroundColor: "#E8F5E8", borderRadius: 10, padding: 10, marginTop: 10,
+  },
+  subscriptionLeft: { flexDirection: "row", alignItems: "center", gap: 6 },
+  subscriptionLabel: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#3E7B27" },
+  subscriptionPrice: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+
+  customFieldsList: {
+    marginTop: 8, backgroundColor: "#F8FFF8", borderRadius: 10,
+    borderWidth: 1, borderColor: "#D4EDD4", overflow: "hidden",
+  },
+  customFieldItem: {
+    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+    paddingHorizontal: 12, paddingVertical: 8,
+    borderBottomWidth: 1, borderBottomColor: "#E8F5E8",
+  },
+  customFieldLabel: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#0B3D2E", flex: 1 },
+  customFieldValue: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#3E7B27", textAlign: "right", flex: 1 },
 });

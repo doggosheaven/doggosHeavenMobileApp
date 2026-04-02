@@ -1,0 +1,25 @@
+{
+  "cli": {
+    "version": ">= 12.0.0"
+  },
+  "build": {
+    "preview": {
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://doggos-heaven-app-backend.vercel.app",
+        "EXPO_PUBLIC_RAZORPAY_KEY": "rzp_live_a2Wc7wv7L7z7l8"
+      }
+    },
+    "production": {
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://doggos-heaven-app-backend.vercel.app",
+        "EXPO_PUBLIC_RAZORPAY_KEY": "rzp_live_a2Wc7wv7L7z7l8"
+      }
+    }
+  }
+}

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
   ScrollView, Alert, ActivityIndicator, Image,
@@ -17,12 +17,15 @@ export default function EditProfileScreen() {
   const [form, setForm] = useState({ fullName: "", phone: "" });
   const [initialized, setInitialized] = useState(false);
 
-  useState(() => {
+  useEffect(() => {
     getAuth().then(({ user }) => {
-      if (user) setForm({ fullName: user.fullName || "", phone: user.phone || "" });
+      if (user) {
+        setForm({ fullName: user.fullName || "", phone: user.phone || "" });
+        if (user.profileImage) setImage(user.profileImage);
+      }
       setInitialized(true);
     });
-  });
+  }, []);
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -49,30 +52,31 @@ export default function EditProfileScreen() {
       Alert.alert("Error", "Name cannot be empty.");
       return;
     }
+    if (form.phone && form.phone.trim().length !== 10) {
+      Alert.alert("Error", "Phone number must be exactly 10 digits.");
+      return;
+    }
     setLoading(true);
     try {
       const { token, user } = await getAuth();
-      const formData = new FormData();
-      formData.append("fullName", form.fullName.trim());
-      formData.append("phone", form.phone.trim());
-      if (image) {
-        formData.append("profileImage", {
-          uri: image,
-          name: "profile.jpg",
-          type: "image/jpeg",
-        });
-      }
 
       const res = await fetch(`${BASE_URL}/api/v1/auth/updateprofile`, {
         method: "PUT",
-        headers: { Authorization: token || "" },
-        body: formData,
+        headers: { "Content-Type": "application/json", Authorization: token || "" },
+        body: JSON.stringify({ fullName: form.fullName.trim(), phone: form.phone.trim() }),
       });
       const data = await res.json();
 
       if (data.success) {
-        await saveAuth(token, { ...user, fullName: form.fullName.trim(), phone: form.phone.trim(), profileImage: data.profileImage || user?.profileImage });
-        Alert.alert("Success", "Profile updated successfully!", [{ text: "OK", onPress: () => router.back() }]);
+        await saveAuth(token, {
+          ...user,
+          fullName: form.fullName.trim(),
+          phone: form.phone.trim(),
+          profileImage: image || user?.profileImage || null,
+        });
+        Alert.alert("Success", "Profile updated successfully!", [
+          { text: "OK", onPress: () => router.replace("/(tabs)/profile") },
+        ]);
       } else {
         Alert.alert("Error", data.message || "Failed to update profile.");
       }
@@ -127,11 +131,17 @@ export default function EditProfileScreen() {
             <TextInput
               style={styles.input}
               value={form.phone}
-              onChangeText={(v) => setForm({ ...form, phone: v })}
-              placeholder="Enter your phone number"
+              onChangeText={(v) => setForm({ ...form, phone: v.replace(/[^0-9]/g, "").slice(0, 10) })}
+              placeholder="Enter 10-digit phone number"
               placeholderTextColor="#aaa"
-              keyboardType="phone-pad"
+              keyboardType="number-pad"
+              maxLength={10}
             />
+            {form.phone.length > 0 && (
+              <Text style={{ fontSize: 11, color: form.phone.length === 10 ? "#3E7B27" : "#B8860B", marginLeft: 4 }}>
+                {form.phone.length}/10
+              </Text>
+            )}
           </View>
         </View>
 

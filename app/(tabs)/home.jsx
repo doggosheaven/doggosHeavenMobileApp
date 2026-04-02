@@ -1,8 +1,10 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl,
+  View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl, Image,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
+import { Ionicons } from "@expo/vector-icons";
 import Header from "../../components/Header";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
@@ -10,7 +12,22 @@ import { BASE_URL } from "../../constants/api";
 const SERVICE_ICONS = {
   Grooming: "✂️", Hostel: "🏠", "Day School": "🎓",
   "Day Care": "🌞", "Play School": "🎮", Veterinary: "🩺", "Dog Park": "🌳",
+  Boarding: "🏠", "Day Boarding": "🌞", "Boarding Wallet (15 days)": "💳",
+  "Day School (26 days)": "🎓", "Play School (26 days)": "🎮",
+  "Grooming (small breed)": "✂️", "Grooming (large breed)": "✂️",
+  "Full Grooming (small breed)": "🛁", "Full Grooming (large breed)": "🛁",
+  "Oil Massage": "💆",
 };
+
+const HEALTH_SERVICES = [
+  { id: "h1", name: "24×7 Medical Services", emoji: "🏥", desc: "Round-the-clock medical care for your pet",  color: "#0B3D2E", bg: "#D4EDD4", border: "#A8D96C" },
+  { id: "h2", name: "Vaccination",           emoji: "💉", desc: "Complete vaccination schedule & records",    color: "#1A5C3A", bg: "#E8F5E8", border: "#D4EDD4" },
+  { id: "h3", name: "Deworming",             emoji: "🔬", desc: "Regular deworming for a healthy pet",        color: "#3E7B27", bg: "#F0F7F0", border: "#D4EDD4" },
+  { id: "h4", name: "Castration",            emoji: "⚕️", desc: "Safe & professional castration procedure",   color: "#0B3D2E", bg: "#E8F5E8", border: "#A8D96C" },
+  { id: "h5", name: "Surgical Treatment",    emoji: "🩺", desc: "Expert surgical care when needed",           color: "#1A5C3A", bg: "#D4EDD4", border: "#D4EDD4" },
+  { id: "h6", name: "Grooming",              emoji: "✂️", desc: "Bath, trim, nail clipping & ear cleaning",   color: "#3E7B27", bg: "#E8F5E8", border: "#D4EDD4" },
+  { id: "h7", name: "Emergency Services",    emoji: "🚨", desc: "Immediate care for urgent situations",        color: "#0B3D2E", bg: "#D4EDD4", border: "#A8D96C" },
+];
 
 const FALLBACK_SERVICES = [
   { _id: "1", purpose: "Grooming", price: 900, halfdayprice: null, isSubscriptionAvailable: true, detail: "Bath, trim, nail clipping & ear cleaning" },
@@ -52,14 +69,70 @@ export default function HomeScreen() {
   };
 
   useEffect(() => { loadData(); }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      getAuth().then(({ user: u }) => setUser(u));
+    }, [])
+  );
   const onRefresh = () => { setRefreshing(true); loadData(); };
 
   const handleViewAll = () => router.push("/(tabs)/services");
 
   const handleBookService = (service) => {
     router.push({
-      pathname: "/(tabs)/bookings",
-      params: { serviceId: service._id, serviceName: service.purpose }
+      pathname: "/screens/bookingform",
+      params: {
+        serviceId: service._id,
+        serviceName: service.purpose,
+        serviceEmoji: service.emoji || "🐾",
+        servicePrice: service.price || 0,
+        serviceHalfPrice: service.halfdayprice || 0,
+        serviceConsultPrice: service.consultationPricePvt || 0,
+        serviceDescription: service.description || "",
+        servicePriceTiers: service.priceTiers?.length ? encodeURIComponent(JSON.stringify(service.priceTiers)) : "",
+      }
+    });
+  };
+
+  const handleViewServiceDetail = (service) => {
+    router.push({
+      pathname: "/screens/servicedetail",
+      params: {
+        serviceId: service._id,
+        serviceName: service.purpose,
+        serviceEmoji: service.emoji || SERVICE_ICONS[service.purpose] || "🐾",
+        servicePrice: service.price || 0,
+        serviceHalfPrice: service.halfdayprice || 0,
+        serviceConsultPrice: service.consultationPricePvt || 0,
+        serviceDescription: service.description || "",
+        servicePriceTiers: service.priceTiers?.length ? encodeURIComponent(JSON.stringify(service.priceTiers)) : "",
+        serviceSubscriptionPrice: service.subscriptionPrice || 0,
+        serviceCustomFields: service.customFields?.length ? encodeURIComponent(JSON.stringify(service.customFields)) : "",
+        isSubscriptionAvailable: service.isSubscriptionAvailable ? "true" : "false",
+      },
+    });
+  };
+
+  const handleHealthService = (svc) => {
+    const match = services.find(
+      (s) => s.purpose.toLowerCase().includes(svc.name.toLowerCase()) ||
+             svc.name.toLowerCase().includes(s.purpose.toLowerCase())
+    );
+    router.push({
+      pathname: "/screens/bookingform",
+      params: {
+        serviceId: match?._id || "",
+        serviceName: svc.name,
+        serviceEmoji: svc.emoji,
+        servicePrice: match?.price || "",
+        serviceHalfPrice: match?.halfdayprice || "",
+        serviceConsultPrice: match?.consultationPricePvt || "",
+        serviceDescription: svc.desc,
+        servicePriceTiers: match?.priceTiers?.length
+          ? encodeURIComponent(JSON.stringify(match.priceTiers))
+          : "",
+      },
     });
   };
 
@@ -81,9 +154,17 @@ export default function HomeScreen() {
             <Text style={styles.userName}>{user?.fullName || "Pet Parent"}</Text>
             <Text style={styles.welcomeSub}>Ready to care for your furry friend?</Text>
           </View>
-          <View style={styles.pawCircle}>
-            <Text style={styles.pawEmoji}>🐾</Text>
-          </View>
+          <TouchableOpacity
+            style={styles.pawCircle}
+            onPress={() => router.push("/(tabs)/profile")}
+            activeOpacity={0.8}
+          >
+            {user?.profileImage ? (
+              <Image source={{ uri: user.profileImage }} style={styles.pawProfileImg} />
+            ) : (
+              <Ionicons name="paw" size={32} color="#A8D96C" />
+            )}
+          </TouchableOpacity>
         </View>
 
         {/* Quick Actions */}
@@ -123,6 +204,33 @@ export default function HomeScreen() {
           <Text style={styles.bannerEmoji}>🐕</Text>
         </View>
 
+        {/* Health & Medical Services */}
+        <View style={styles.sectionRow}>
+          <Text style={styles.sectionTitle}>Health & Medical</Text>
+        </View>
+        <View style={styles.healthGrid}>
+          {HEALTH_SERVICES.map((svc) => (
+            <TouchableOpacity
+              key={svc.id}
+              style={[styles.healthCard, { borderColor: svc.border }]}
+              onPress={() => handleHealthService(svc)}
+              activeOpacity={0.82}
+            >
+              <View style={styles.healthCardTop}>
+                <View style={[styles.healthIconBox, { backgroundColor: svc.bg }]}>
+                  <Text style={styles.healthEmoji}>{svc.emoji}</Text>
+                </View>
+                <Text style={styles.healthName} numberOfLines={2}>{svc.name}</Text>
+                <Text style={styles.healthDesc} numberOfLines={2}>{svc.desc}</Text>
+              </View>
+              <View style={[styles.healthBookBtn, { backgroundColor: svc.color }]}>
+                <Text style={styles.healthBookTxt}>Book Now</Text>
+                <Ionicons name="arrow-forward" size={12} color="#A8D96C" />
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+
         {/* Services Section */}
         <View
           style={styles.sectionRow}
@@ -136,26 +244,68 @@ export default function HomeScreen() {
 
         <View style={styles.servicesGrid}>
           {featuredServices.map((service) => (
-            <TouchableOpacity
-              key={service._id}
-              style={styles.serviceCard}
-              activeOpacity={0.8}
-              onPress={() => handleBookService(service)}
-            >
-              <View style={styles.serviceIconBox}>
-                <Text style={styles.serviceIcon}>{SERVICE_ICONS[service.purpose] || "🐾"}</Text>
+            <TouchableOpacity key={service._id} style={styles.serviceCard} onPress={() => handleViewServiceDetail(service)} activeOpacity={0.88}>
+              {/* Top Row */}
+              <View style={styles.cardTop}>
+                <View style={styles.serviceIconBox}>
+                  <Text style={styles.serviceIcon}>{service.emoji || SERVICE_ICONS[service.purpose] || "🐾"}</Text>
+                </View>
+                <View style={styles.serviceInfo}>
+                  <Text style={styles.serviceName}>{service.purpose}</Text>
+                  <Text style={styles.serviceDetail}>{service.description || service.detail || "Professional pet care"}</Text>
+                  {service.isSubscriptionAvailable && (
+                    <View style={styles.subBadge}>
+                      <Ionicons name="checkmark-circle" size={12} color="#3E7B27" />
+                      <Text style={styles.subBadgeText}>Subscription Available</Text>
+                    </View>
+                  )}
+                </View>
+                <Ionicons name="chevron-forward" size={16} color="#A8D96C" />
               </View>
-              <View style={styles.serviceInfo}>
-                <Text style={styles.serviceName}>{service.purpose}</Text>
-                <Text style={styles.serviceDetail}>{service.detail || "Professional pet care"}</Text>
-                {service.price ? (
-                  <Text style={styles.servicePrice}>Starting ₹{service.price}</Text>
-                ) : service.consultationPricePvt ? (
-                  <Text style={styles.servicePrice}>Consult ₹{service.consultationPricePvt}</Text>
-                ) : (
-                  <Text style={styles.servicePriceNA}>Price on request</Text>
-                )}
+
+              <View style={styles.divider} />
+
+              {/* Price + Button Row */}
+              <View style={styles.bottomRow}>
+                <View style={styles.priceSection}>
+                  {service.priceTiers?.length > 0 ? service.priceTiers.map((t, i) => (
+                    <View key={i} style={styles.priceChip}>
+                      <Text style={styles.priceLabel}>{t.label}</Text>
+                      <Text style={styles.priceValue}>₹{t.price}</Text>
+                    </View>
+                  )) : service.price ? (
+                    <View style={styles.priceChip}>
+                      <Text style={styles.priceLabel}>Price</Text>
+                      <Text style={styles.priceValue}>₹{service.price}</Text>
+                    </View>
+                  ) : service.consultationPricePvt ? (
+                    <View style={styles.priceChip}>
+                      <Text style={styles.priceLabel}>Consult</Text>
+                      <Text style={styles.priceValue}>₹{service.consultationPricePvt}</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.servicePriceNA}>Price on request</Text>
+                  )}
+                </View>
+                <TouchableOpacity
+                  style={styles.reserveBtn}
+                  onPress={(e) => { e.stopPropagation?.(); handleBookService(service); }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.reserveBtnText}>Reserve</Text>
+                  <Ionicons name="arrow-forward" size={14} color="#fff" />
+                </TouchableOpacity>
               </View>
+
+              {service.subscriptionPrice ? (
+                <View style={styles.subscriptionRow}>
+                  <View style={styles.subscriptionLeft}>
+                    <Ionicons name="checkmark-circle" size={14} color="#3E7B27" />
+                    <Text style={styles.subscriptionLabel}>Hostel Subscription available</Text>
+                  </View>
+                  <Text style={styles.subscriptionPrice}>₹{service.subscriptionPrice}/day</Text>
+                </View>
+              ) : null}
             </TouchableOpacity>
           ))}
 
@@ -186,18 +336,22 @@ const styles = StyleSheet.create({
     width: 60, height: 60, borderRadius: 30,
     backgroundColor: "#1A5C3A",
     justifyContent: "center", alignItems: "center",
+    overflow: "hidden",
   },
-  pawEmoji: { fontSize: 30 },
+  pawProfileImg: {
+    width: 60, height: 60, borderRadius: 30,
+  },
+  pawEmoji: { fontSize: 30, color: "#A8D96C" },
 
   quickRow: { flexDirection: "row", gap: 10, marginBottom: 16 },
   quickCard: {
     flex: 1, backgroundColor: "#fff", borderRadius: 16, padding: 14,
     alignItems: "center", elevation: 2,
-    borderWidth: 1, borderColor: "#D4EDD4",
+    borderWidth: 1.5, borderColor: "#A8D96C",
   },
   quickIconBox: {
     width: 46, height: 46, borderRadius: 14,
-    backgroundColor: "#E8F5E8",
+    backgroundColor: "#0B3D2E",
     justifyContent: "center", alignItems: "center", marginBottom: 8,
   },
   quickIcon: { fontSize: 22 },
@@ -230,20 +384,48 @@ const styles = StyleSheet.create({
   servicesGrid: { gap: 10 },
   serviceCard: {
     backgroundColor: "#fff", borderRadius: 16, padding: 16,
-    flexDirection: "row", alignItems: "center", elevation: 2,
-    borderWidth: 1, borderColor: "#D4EDD4",
+    elevation: 2, borderWidth: 1.5, borderColor: "#D4EDD4",
   },
+  cardTop: { flexDirection: "row", alignItems: "flex-start", marginBottom: 12 },
   serviceIconBox: {
-    width: 50, height: 50, borderRadius: 14,
-    backgroundColor: "#E8F5E8",
+    width: 52, height: 52, borderRadius: 14,
+    backgroundColor: "#0B3D2E",
     justifyContent: "center", alignItems: "center", marginRight: 14,
   },
-  serviceIcon: { fontSize: 24 },
+  serviceIcon: { fontSize: 26 },
   serviceInfo: { flex: 1 },
   serviceName: { fontSize: 15, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 2 },
-  serviceDetail: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#666", marginBottom: 4 },
-  servicePrice: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#3E7B27" },
+  serviceDetail: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#666", marginBottom: 6 },
+  subBadge: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    backgroundColor: "#E8F5E8", alignSelf: "flex-start",
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10,
+  },
+  subBadgeText: { fontSize: 10, fontFamily: "Poppins_700Bold", color: "#3E7B27" },
+  divider: { height: 1, backgroundColor: "#E8F5E8", marginBottom: 12 },
+  bottomRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  priceSection: { flexDirection: "row", gap: 8, flexWrap: "wrap", flex: 1 },
+  priceChip: {
+    backgroundColor: "#E8F5E8", borderRadius: 10,
+    paddingHorizontal: 10, paddingVertical: 6, alignItems: "center",
+    borderWidth: 1, borderColor: "#D4EDD4",
+  },
+  priceLabel: { fontSize: 9, fontFamily: "Inter_400Regular", color: "#3E7B27" },
+  priceValue: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
   servicePriceNA: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#999" },
+  reserveBtn: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    backgroundColor: "#3E7B27", paddingHorizontal: 16, paddingVertical: 10,
+    borderRadius: 20,
+  },
+  reserveBtnText: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#fff" },
+  subscriptionRow: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    backgroundColor: "#E8F5E8", borderRadius: 10, padding: 10, marginTop: 10,
+  },
+  subscriptionLeft: { flexDirection: "row", alignItems: "center", gap: 6 },
+  subscriptionLabel: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#3E7B27" },
+  subscriptionPrice: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
 
   viewAllCard: {
     backgroundColor: "#0B3D2E", borderRadius: 16, padding: 18,
@@ -251,4 +433,31 @@ const styles = StyleSheet.create({
   },
   viewAllCardText: { fontSize: 15, fontFamily: "Poppins_700Bold", color: "#fff", marginBottom: 4 },
   viewAllCardCount: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#A8D96C" },
+
+  // Health & Medical
+  healthGrid: {
+    flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 20,
+  },
+  healthCard: {
+    width: "47%", backgroundColor: "#fff", borderRadius: 16,
+    elevation: 2, borderWidth: 1.5,
+    overflow: "hidden",
+    justifyContent: "space-between",
+    minHeight: 180,
+  },
+  healthCardTop: {
+    flex: 1, padding: 14, paddingBottom: 10,
+  },
+  healthIconBox: {
+    width: 48, height: 48, borderRadius: 14,
+    justifyContent: "center", alignItems: "center", marginBottom: 10,
+  },
+  healthEmoji: { fontSize: 24 },
+  healthName: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 4, lineHeight: 18 },
+  healthDesc: { fontSize: 10, fontFamily: "Inter_400Regular", color: "#3E7B27", lineHeight: 14 },
+  healthBookBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 6, paddingVertical: 11,
+  },
+  healthBookTxt: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
 });
