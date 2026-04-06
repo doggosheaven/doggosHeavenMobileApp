@@ -35,6 +35,7 @@ export default function AdminLayout() {
       <Tabs.Screen name="billing" options={{ href: null }} />
       <Tabs.Screen name="billhistory" options={{ href: null }} />
       <Tabs.Screen name="totalvisits" options={{ href: null }} />
+      <Tabs.Screen name="boardingsubscriptions" options={{ href: null }} />
     </Tabs>
   );
 }

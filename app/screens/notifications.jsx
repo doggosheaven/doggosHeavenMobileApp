@@ -41,21 +41,21 @@ export default function NotificationsScreen() {
   const [readIds, setReadIds] = useState(new Set());
   const [payingId, setPayingId] = useState(null);
   const [authData, setAuthData] = useState({ user: null, token: null });
-  const STORAGE_KEY = "notif_read_ids";
+  const [storageKey, setStorageKey] = useState(null);
 
-  // Load persisted read IDs from AsyncStorage
-  const loadReadIds = async () => {
+  // Load persisted read IDs from AsyncStorage (user-specific)
+  const loadReadIds = async (key) => {
     try {
-      const stored = await AsyncStorage.getItem(STORAGE_KEY);
+      const stored = await AsyncStorage.getItem(key);
       if (stored) return new Set(JSON.parse(stored));
     } catch (_) {}
     return new Set();
   };
 
   // Save read IDs to AsyncStorage
-  const saveReadIds = async (ids) => {
+  const saveReadIds = async (ids, key) => {
     try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify([...ids]));
+      await AsyncStorage.setItem(key, JSON.stringify([...ids]));
     } catch (_) {}
   };
 
@@ -65,11 +65,13 @@ export default function NotificationsScreen() {
       const { user, token } = await getAuth();
       setAuthData({ user, token });
       if (!user?.id) return;
+      const key = `notif_read_ids_${user.id}`;
+      setStorageKey(key);
       const [res, persistedIds] = await Promise.all([
         fetch(`${BASE_URL}/api/v1/customerappointment/notifications/${user.id}`, {
           headers: { Authorization: token || "" },
         }),
-        loadReadIds(),
+        loadReadIds(key),
       ]);
       const data = await res.json();
       if (data.success) {
@@ -100,7 +102,7 @@ export default function NotificationsScreen() {
   const markRead = (id) => {
     setReadIds((prev) => {
       const next = new Set([...prev, String(id)]);
-      saveReadIds(next);
+      if (storageKey) saveReadIds(next, storageKey);
       return next;
     });
   };
@@ -108,7 +110,7 @@ export default function NotificationsScreen() {
   const markAllRead = () => {
     setReadIds((prev) => {
       const next = new Set(notifications.map((n) => String(n.id)));
-      saveReadIds(next);
+      if (storageKey) saveReadIds(next, storageKey);
       return next;
     });
   };

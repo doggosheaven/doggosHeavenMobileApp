@@ -142,6 +142,7 @@ export default function AdminDashboard() {
             { label: "Walk-in Bill",      icon: "receipt-outline",        onPress: () => router.push("/admin/billing") },
             { label: "Visits",            icon: "footsteps-outline",      onPress: () => router.push("/admin/totalvisits") },
             { label: "Unblock Requests",  icon: "lock-open-outline",      onPress: () => router.push("/admin/unblock-requests") },
+            { label: "Boarding Subs",     icon: "home-outline",           onPress: () => router.push("/admin/boardingsubscriptions") },
           ].map((a) => (
             <TouchableOpacity key={a.label} style={styles.actionCard} onPress={a.onPress} activeOpacity={0.8}>
               <View style={styles.actionIconBox}>

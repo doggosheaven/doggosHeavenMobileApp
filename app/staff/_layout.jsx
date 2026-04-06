@@ -58,6 +58,7 @@ export default function StaffLayout() {
       <Tabs.Screen name="billhistory" options={{ href: null }} />
       <Tabs.Screen name="totalvisits" options={{ href: null }} />
       <Tabs.Screen name="blacklisted" options={{ href: null }} />
+      <Tabs.Screen name="boardingsubscriptions" options={{ href: null }} />
     </Tabs>
   );
 }

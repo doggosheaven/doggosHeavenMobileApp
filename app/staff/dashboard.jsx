@@ -226,6 +226,7 @@ export default function StaffDashboard() {
               { label: "Walk-in Bill", icon: "receipt-outline",         onPress: () => router.push("/staff/billing") },
               { label: "Deboard",      icon: "exit-outline",           onPress: () => router.push("/staff/deboard") },
               { label: "Blacklisted",  icon: "ban-outline",            onPress: () => router.push("/staff/blacklisted") },
+              { label: "Boarding Subs",icon: "home-outline",           onPress: () => router.push("/staff/boardingsubscriptions") },
             ].map((a) => (
               <TouchableOpacity key={a.label} style={s.actionCard} onPress={a.onPress} activeOpacity={0.8}>
                 <View style={s.actionIconBox}>

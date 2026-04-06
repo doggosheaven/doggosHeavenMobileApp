@@ -76,6 +76,8 @@ export default function ProfileScreen() {
 
   const menuItems = [
     { icon: "paw-outline", label: "My Pets", onPress: () => router.push("/screens/mypets"), iconColor: "#3E7B27" },
+    { icon: "wallet-outline", label: "My Wallet", onPress: () => router.push("/screens/walletscreen"), iconColor: "#3E7B27" },
+    { icon: "home-outline", label: "15-Day Boarding Plan", onPress: () => router.push("/screens/boardingsubscription"), iconColor: "#3E7B27" },
     { icon: "notifications-outline", label: "Notifications", onPress: () => router.push("/screens/notifications") },
     { icon: "key-outline", label: "Change Password", onPress: () => router.push("/screens/changepassword") },
     { icon: "person-outline", label: "Edit Profile", onPress: () => router.push("/screens/editprofile") },

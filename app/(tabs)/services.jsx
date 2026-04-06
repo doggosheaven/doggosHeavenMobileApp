@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  FlatList, RefreshControl,
+  RefreshControl, SectionList, ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -36,10 +36,12 @@ const EXCLUDED = ["Buy Subscription", "Shop", "Inquiry"];
 
 export default function ServicesScreen() {
   const router = useRouter();
-  const [services, setServices] = useState(FALLBACK_SERVICES);
+  const [services, setServices] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const loadServices = async () => {
+  const loadServices = async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
     try {
       const { token } = await getAuth();
       const res = await fetch(`${BASE_URL}/api/v1/visit/getallvisittypes`, {
@@ -48,17 +50,32 @@ export default function ServicesScreen() {
       const data = await res.json();
       if (data.success) {
         const filtered = data.visitTypes.filter((s) => !EXCLUDED.includes(s.purpose));
-        if (filtered.length > 0) setServices(filtered);
+        setServices(filtered.length > 0 ? filtered : FALLBACK_SERVICES);
+      } else {
+        setServices(FALLBACK_SERVICES);
       }
     } catch (e) {
       console.log(e);
+      setServices(FALLBACK_SERVICES);
     } finally {
+      setLoading(false);
       setRefreshing(false);
     }
   };
 
   useEffect(() => { loadServices(); }, []);
-  const onRefresh = () => { setRefreshing(true); loadServices(); };
+  const onRefresh = () => loadServices(true);
+
+  // Group services by category
+  const sections = useMemo(() => {
+    const map = {};
+    services.forEach((s) => {
+      const cat = s.category || "General";
+      if (!map[cat]) map[cat] = [];
+      map[cat].push(s);
+    });
+    return Object.entries(map).map(([title, data]) => ({ title, data }));
+  }, [services]);
 
   const handleBook = (service) => {
     router.push({
@@ -98,8 +115,11 @@ export default function ServicesScreen() {
   return (
     <View style={styles.container}>
       <Header title="Our Services" />
-      <FlatList
-        data={services}
+      {loading ? (
+        <ActivityIndicator size="large" color="#0B3D2E" style={{ flex: 1 }} />
+      ) : (
+        <SectionList
+        sections={sections}
         keyExtractor={(item) => item._id}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
@@ -110,6 +130,11 @@ export default function ServicesScreen() {
             <Text style={styles.headerSub}>Choose from our wide range of services for your furry friend</Text>
           </View>
         }
+        renderSectionHeader={({ section: { title } }) => (
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionHeaderText}>{title}</Text>
+          </View>
+        )}
         renderItem={({ item: service }) => (
           <TouchableOpacity style={styles.card} onPress={() => handleViewDetail(service)} activeOpacity={0.88}>
             {/* Top Row */}
@@ -178,7 +203,8 @@ export default function ServicesScreen() {
             ) : null}
           </TouchableOpacity>
         )}
-      />
+        />
+      )}
     </View>
   );
 }
@@ -192,6 +218,11 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 18, fontFamily: "Poppins_700Bold", color: "#fff", marginBottom: 4 },
   headerSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#A8D96C" },
+
+  sectionHeader: {
+    backgroundColor: "#F0F7F0", paddingVertical: 8, paddingHorizontal: 4, marginBottom: 8, marginTop: 4,
+  },
+  sectionHeaderText: { fontSize: 15, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
 
   card: {
     backgroundColor: "#fff", borderRadius: 16, padding: 16,

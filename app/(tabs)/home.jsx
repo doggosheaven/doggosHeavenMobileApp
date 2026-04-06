@@ -48,18 +48,26 @@ export default function HomeScreen() {
   const [user, setUser] = useState(null);
   const [services, setServices] = useState(FALLBACK_SERVICES);
   const [refreshing, setRefreshing] = useState(false);
+  const [activeBoarding, setActiveBoarding] = useState(null);
+  const [boardingHistory, setBoardingHistory] = useState([]);
 
   const loadData = async () => {
     try {
       const { user: savedUser, token } = await getAuth();
       setUser(savedUser);
-      const res = await fetch(`${BASE_URL}/api/v1/visit/getallvisittypes`, {
-        headers: { Authorization: token || "" },
-      });
-      const data = await res.json();
-      if (data.success) {
-        const filtered = data.visitTypes.filter((s) => !EXCLUDED.includes(s.purpose));
+      const [svcRes, boardRes] = await Promise.all([
+        fetch(`${BASE_URL}/api/v1/visit/getallvisittypes`, { headers: { Authorization: token || "" } }),
+        fetch(`${BASE_URL}/api/v1/boarding-subscription/dashboard`, { headers: { Authorization: token || "" } }),
+      ]);
+      const svcData = await svcRes.json();
+      const boardData = await boardRes.json();
+      if (svcData.success) {
+        const filtered = svcData.visitTypes.filter((s) => !EXCLUDED.includes(s.purpose));
         setServices(filtered.length > 0 ? filtered : FALLBACK_SERVICES);
+      }
+      if (boardData.success) {
+        setActiveBoarding(boardData.dashboard?.activeBoarding || null);
+        setBoardingHistory(boardData.dashboard?.bookings || []);
       }
     } catch (e) {
       console.log(e);
@@ -181,13 +189,69 @@ export default function HomeScreen() {
             </View>
             <Text style={styles.quickLabel}>Add{"\n"}Pet</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.quickCard} onPress={() => router.push("/(tabs)/bookings")} activeOpacity={0.8}>
+          <TouchableOpacity style={styles.quickCard} onPress={() => router.push("/screens/walletscreen")} activeOpacity={0.8}>
             <View style={styles.quickIconBox}>
-              <Text style={styles.quickIcon}>📋</Text>
+              <Text style={styles.quickIcon}>💳</Text>
             </View>
-            <Text style={styles.quickLabel}>History</Text>
+            <Text style={styles.quickLabel}>My{"\n"}Wallet</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quickCard} onPress={() => router.push("/screens/boardingsubscription")} activeOpacity={0.8}>
+            <View style={styles.quickIconBox}>
+              <Text style={styles.quickIcon}>🏠</Text>
+            </View>
+            <Text style={styles.quickLabel}>Boarding{"\n"}Plan</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Boarding Status Card */}
+        <TouchableOpacity style={activeBoarding ? styles.boardingActiveCard : styles.boardingBanner} onPress={() => router.push("/screens/boardingsubscription")} activeOpacity={0.88}>
+          {activeBoarding ? (
+            <>
+              <View style={styles.boardingBannerLeft}>
+                <View style={styles.boardingBadge}>
+                  <Text style={styles.boardingBadgeText}>● BOARDING ACTIVE</Text>
+                </View>
+                <Text style={styles.boardingTitle}>{activeBoarding.numberOfPets} Pet{activeBoarding.numberOfPets > 1 ? "s" : ""} Boarded</Text>
+                <Text style={styles.boardingPrice}>₹{activeBoarding.dailyCharge}/day <Text style={styles.boardingPriceSmall}>· {activeBoarding.daysRemaining} days left</Text></Text>
+                <View style={styles.boardingSubscribeBtn}>
+                  <Text style={styles.boardingSubscribeBtnText}>View Details →</Text>
+                </View>
+              </View>
+              <Text style={styles.boardingEmoji}>🏡</Text>
+            </>
+          ) : boardingHistory.length > 0 ? (
+            <>
+              <View style={styles.boardingBannerLeft}>
+                <View style={styles.boardingBadge}>
+                  <Text style={styles.boardingBadgeText}>🐾 BOARDING HISTORY</Text>
+                </View>
+                <Text style={styles.boardingTitle}>Last Boarding</Text>
+                <Text style={styles.boardingPrice}>
+                  {boardingHistory[0]?.status?.toUpperCase()}
+                  <Text style={styles.boardingPriceSmall}> · {boardingHistory[0]?.numberOfPets} pet{boardingHistory[0]?.numberOfPets > 1 ? "s" : ""}</Text>
+                </Text>
+                <View style={styles.boardingSubscribeBtn}>
+                  <Text style={styles.boardingSubscribeBtnText}>Board Again →</Text>
+                </View>
+              </View>
+              <Text style={styles.boardingEmoji}>🏡</Text>
+            </>
+          ) : (
+            <>
+              <View style={styles.boardingBannerLeft}>
+                <View style={styles.boardingBadge}>
+                  <Text style={styles.boardingBadgeText}>🐾 SUBSCRIPTION PLAN</Text>
+                </View>
+                <Text style={styles.boardingTitle}>15-Day Boarding Plan</Text>
+                <Text style={styles.boardingPrice}>₹11,500 <Text style={styles.boardingPriceSmall}>· ₹766/day per pet</Text></Text>
+                <View style={styles.boardingSubscribeBtn}>
+                  <Text style={styles.boardingSubscribeBtnText}>Subscribe Now →</Text>
+                </View>
+              </View>
+              <Text style={styles.boardingEmoji}>🏡</Text>
+            </>
+          )}
+        </TouchableOpacity>
 
         {/* Promo Banner */}
         <View style={styles.banner}>
@@ -230,6 +294,102 @@ export default function HomeScreen() {
             </TouchableOpacity>
           ))}
         </View>
+
+        {/* Doctor Section */}
+        <View style={styles.sectionRow}>
+          <Text style={styles.sectionTitle}>Our Veterinarian</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.doctorCard}
+          activeOpacity={0.88}
+          onPress={() => {
+            const vetService = services.find((s) =>
+              s.purpose.toLowerCase().includes("vet") ||
+              s.purpose.toLowerCase().includes("consult")
+            );
+            router.push({
+              pathname: "/screens/bookingform",
+              params: {
+                serviceId: vetService?._id || "",
+                serviceName: vetService?.purpose || "Veterinary Consultation",
+                serviceEmoji: "🩺",
+                servicePrice: vetService?.price || 0,
+                serviceConsultPrice: vetService?.consultationPricePvt || 500,
+                serviceDescription: "Expert vet consultation & checkup",
+                servicePriceTiers: vetService?.priceTiers?.length
+                  ? encodeURIComponent(JSON.stringify(vetService.priceTiers)) : "",
+              },
+            });
+          }}
+        >
+          {/* Dark header banner */}
+          <View style={styles.doctorBanner}>
+            <View style={styles.doctorBannerLeft}>
+              <View style={styles.doctorAvatarLarge}>
+                <Text style={{ fontSize: 34 }}>👨⚕️</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <View style={styles.doctorVerifiedRow}>
+                  <Text style={styles.doctorNameWhite}>Dr. Bhuvnesh Ahlawat</Text>
+                  <View style={styles.verifiedBadge}>
+                    <Ionicons name="checkmark-circle" size={12} color="#A8D96C" />
+                    <Text style={styles.verifiedText}>Verified</Text>
+                  </View>
+                </View>
+                <Text style={styles.doctorDegWhite}>B.V.Sc & A.H. — Veterinarian</Text>
+                <View style={styles.doctorRatingRow}>
+                  {[1,2,3,4,5].map((s) => (
+                    <Ionicons key={s} name="star" size={12} color="#A8D96C" />
+                  ))}
+                  <Text style={styles.doctorRatingText}>5.0 • Expert Vet</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+
+          {/* Fee + timing row */}
+          <View style={styles.doctorMetaRow}>
+            <View style={styles.doctorMetaItem}>
+              <Ionicons name="pricetag-outline" size={15} color="#0B3D2E" />
+              <View>
+                <Text style={styles.doctorMetaLabel}>Consultation</Text>
+                <Text style={styles.doctorMetaValue}>₹500</Text>
+              </View>
+            </View>
+            <View style={styles.doctorMetaSep} />
+            <View style={styles.doctorMetaItem}>
+              <Ionicons name="time-outline" size={15} color="#0B3D2E" />
+              <View>
+                <Text style={styles.doctorMetaLabel}>Working Hours</Text>
+                <Text style={styles.doctorMetaValue}>10 AM – 9 PM</Text>
+              </View>
+            </View>
+            <View style={styles.doctorMetaSep} />
+            <View style={styles.doctorMetaItem}>
+              <Ionicons name="location-outline" size={15} color="#0B3D2E" />
+              <View>
+                <Text style={styles.doctorMetaLabel}>Location</Text>
+                <Text style={styles.doctorMetaValue}>Jhajjar</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Skills */}
+          <View style={styles.doctorSkillsRow}>
+            {["Surgery","Vaccination","Dermatology","OPD","Diagnosis"].map((s) => (
+              <View key={s} style={styles.doctorSkillChip}>
+                <Text style={styles.doctorSkillText}>{s}</Text>
+              </View>
+            ))}
+          </View>
+
+          {/* Book button */}
+          <View style={styles.doctorBookBtn}>
+            <Ionicons name="calendar-outline" size={16} color="#0B3D2E" />
+            <Text style={styles.doctorBookBtnText}>Book Consultation</Text>
+            <Ionicons name="arrow-forward" size={15} color="#0B3D2E" />
+          </View>
+        </TouchableOpacity>
 
         {/* Services Section */}
         <View
@@ -343,19 +503,48 @@ const styles = StyleSheet.create({
   },
   pawEmoji: { fontSize: 30, color: "#A8D96C" },
 
-  quickRow: { flexDirection: "row", gap: 10, marginBottom: 16 },
+  quickRow: { flexDirection: "row", gap: 8, marginBottom: 16 },
   quickCard: {
-    flex: 1, backgroundColor: "#fff", borderRadius: 16, padding: 14,
+    flex: 1, backgroundColor: "#fff", borderRadius: 14, padding: 10,
     alignItems: "center", elevation: 2,
     borderWidth: 1.5, borderColor: "#A8D96C",
   },
   quickIconBox: {
-    width: 46, height: 46, borderRadius: 14,
+    width: 40, height: 40, borderRadius: 12,
     backgroundColor: "#0B3D2E",
-    justifyContent: "center", alignItems: "center", marginBottom: 8,
+    justifyContent: "center", alignItems: "center", marginBottom: 6,
   },
-  quickIcon: { fontSize: 22 },
-  quickLabel: { fontSize: 11, fontFamily: "Poppins_700Bold", color: "#0B3D2E", textAlign: "center", lineHeight: 16 },
+  quickIcon: { fontSize: 18 },
+  quickLabel: { fontSize: 10, fontFamily: "Poppins_700Bold", color: "#0B3D2E", textAlign: "center", lineHeight: 14 },
+
+  // Boarding Plan Banner
+  boardingActiveCard: {
+    backgroundColor: "#1A5C3A", borderRadius: 20, padding: 20,
+    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+    marginBottom: 16, elevation: 4,
+    borderWidth: 1.5, borderColor: "#A8D96C",
+  },
+  boardingBanner: {
+    backgroundColor: "#0B3D2E", borderRadius: 20, padding: 20,
+    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+    marginBottom: 16, elevation: 4,
+    borderWidth: 1.5, borderColor: "#A8D96C",
+  },
+  boardingBannerLeft: { flex: 1 },
+  boardingBadge: {
+    backgroundColor: "rgba(168,217,108,0.2)", alignSelf: "flex-start",
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, marginBottom: 8,
+  },
+  boardingBadgeText: { fontSize: 10, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
+  boardingTitle: { fontSize: 20, fontFamily: "Poppins_700Bold", color: "#fff", marginBottom: 4 },
+  boardingPrice: { fontSize: 16, fontFamily: "Poppins_700Bold", color: "#A8D96C", marginBottom: 14 },
+  boardingPriceSmall: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#aaa" },
+  boardingSubscribeBtn: {
+    backgroundColor: "#A8D96C", alignSelf: "flex-start",
+    paddingHorizontal: 18, paddingVertical: 9, borderRadius: 20,
+  },
+  boardingSubscribeBtnText: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+  boardingEmoji: { fontSize: 60, marginLeft: 8 },
 
   banner: {
     backgroundColor: "#1A5C3A", borderRadius: 20, padding: 20,
@@ -460,4 +649,58 @@ const styles = StyleSheet.create({
     gap: 6, paddingVertical: 11,
   },
   healthBookTxt: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
+
+  // Doctor Card
+  doctorCard: {
+    backgroundColor: "#fff", borderRadius: 20,
+    marginBottom: 20, elevation: 4,
+    borderWidth: 1.5, borderColor: "#A8D96C",
+    overflow: "hidden",
+  },
+  doctorBanner: {
+    backgroundColor: "#0B3D2E", padding: 18,
+  },
+  doctorBannerLeft: { flexDirection: "row", alignItems: "center", gap: 14 },
+  doctorAvatarLarge: {
+    width: 68, height: 68, borderRadius: 34,
+    backgroundColor: "rgba(168,217,108,0.15)",
+    borderWidth: 2, borderColor: "#A8D96C",
+    justifyContent: "center", alignItems: "center",
+  },
+  doctorVerifiedRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 3 },
+  doctorNameWhite: { fontSize: 16, fontFamily: "Poppins_700Bold", color: "#fff" },
+  verifiedBadge: {
+    flexDirection: "row", alignItems: "center", gap: 3,
+    backgroundColor: "rgba(168,217,108,0.2)",
+    paddingHorizontal: 7, paddingVertical: 2, borderRadius: 20,
+  },
+  verifiedText: { fontSize: 10, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
+  doctorDegWhite: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#A8D96C", marginBottom: 6 },
+  doctorRatingRow: { flexDirection: "row", alignItems: "center", gap: 3 },
+  doctorRatingText: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#ccc", marginLeft: 4 },
+
+  doctorMetaRow: {
+    flexDirection: "row", alignItems: "center",
+    paddingHorizontal: 16, paddingVertical: 14,
+    borderBottomWidth: 1, borderBottomColor: "#E8F5E8",
+  },
+  doctorMetaItem: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
+  doctorMetaSep: { width: 1, height: 32, backgroundColor: "#E8F5E8" },
+  doctorMetaLabel: { fontSize: 9, fontFamily: "Inter_400Regular", color: "#888" },
+  doctorMetaValue: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+
+  doctorSkillsRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, paddingHorizontal: 16, paddingVertical: 12 },
+  doctorSkillChip: {
+    backgroundColor: "#E8F5E8", borderRadius: 20,
+    paddingHorizontal: 10, paddingVertical: 5,
+    borderWidth: 1, borderColor: "#D4EDD4",
+  },
+  doctorSkillText: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#0B3D2E" },
+
+  doctorBookBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    backgroundColor: "#A8D96C", margin: 14, marginTop: 4,
+    borderRadius: 14, paddingVertical: 13,
+  },
+  doctorBookBtnText: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
 });

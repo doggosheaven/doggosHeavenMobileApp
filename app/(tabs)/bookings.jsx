@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  RefreshControl, Alert, ActivityIndicator,
+  RefreshControl, Alert, ActivityIndicator, Modal,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -17,7 +17,13 @@ const STATUS_CONFIG = {
   cancelled: { label: "Cancelled", bg: "#FFEBEE", color: "#C62828", icon: "❌" },
 };
 
-const FILTERS = ["All", "Pending", "Confirmed", "Completed", "Cancelled"];
+const FILTERS = [
+  { key: "All",       icon: "apps-outline",            label: "All" },
+  { key: "Pending",   icon: "time-outline",             label: "Pending" },
+  { key: "Confirmed", icon: "checkmark-circle-outline", label: "Confirmed" },
+  { key: "Completed", icon: "ribbon-outline",           label: "Completed" },
+  { key: "Cancelled", icon: "close-circle-outline",     label: "Cancelled" },
+];
 
 export default function BookingsScreen() {
   const router = useRouter();
@@ -28,6 +34,7 @@ export default function BookingsScreen() {
   const [token, setToken] = useState(null);
   const [user, setUser] = useState(null);
   const [payingId, setPayingId] = useState(null);
+  const [showFilterModal, setShowFilterModal] = useState(false);
 
   const loadAppointments = useCallback(async () => {
     try {
@@ -96,6 +103,8 @@ export default function BookingsScreen() {
     ? appointments
     : appointments.filter((a) => a.status === filter.toLowerCase());
 
+  const activeFilter = FILTERS.find((f) => f.key === filter);
+
   const formatDate = (d) => new Date(d).toLocaleDateString("en-IN", {
     day: "numeric", month: "short", year: "numeric",
   });
@@ -113,23 +122,42 @@ export default function BookingsScreen() {
     <View style={styles.container}>
       <Header title="All Bookings" />
 
-      {/* Filter Tabs */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.filterBar}
-        contentContainerStyle={styles.filterContent}
-      >
-        {FILTERS.map((f) => (
-          <TouchableOpacity
-            key={f}
-            style={[styles.filterChip, filter === f && styles.filterChipActive]}
-            onPress={() => setFilter(f)}
-          >
-            <Text style={[styles.filterText, filter === f && styles.filterTextActive]}>{f}</Text>
+      {/* Filter Button Row */}
+      <View style={styles.filterRow}>
+        <TouchableOpacity style={styles.filterBtn} onPress={() => setShowFilterModal(true)} activeOpacity={0.8}>
+          <Ionicons name="filter" size={16} color="#0B3D2E" />
+          <Text style={styles.filterBtnText}>Filter: {activeFilter?.label}</Text>
+          <Ionicons name="chevron-down" size={14} color="#0B3D2E" />
+        </TouchableOpacity>
+        {filter !== "All" && (
+          <TouchableOpacity style={styles.clearFilterBtn} onPress={() => setFilter("All")}>
+            <Ionicons name="close-circle" size={16} color="#C62828" />
+            <Text style={styles.clearFilterText}>Clear</Text>
           </TouchableOpacity>
-        ))}
-      </ScrollView>
+        )}
+        <Text style={styles.filterCount}>{filtered.length} booking{filtered.length !== 1 ? "s" : ""}</Text>
+      </View>
+
+      {/* Filter Modal */}
+      <Modal visible={showFilterModal} transparent animationType="fade" onRequestClose={() => setShowFilterModal(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowFilterModal(false)}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>Filter Bookings</Text>
+            {FILTERS.map((f) => (
+              <TouchableOpacity
+                key={f.key}
+                style={[styles.modalOption, filter === f.key && styles.modalOptionActive]}
+                onPress={() => { setFilter(f.key); setShowFilterModal(false); }}
+                activeOpacity={0.8}
+              >
+                <Ionicons name={f.icon} size={20} color={filter === f.key ? "#A8D96C" : "#0B3D2E"} />
+                <Text style={[styles.modalOptionText, filter === f.key && styles.modalOptionTextActive]}>{f.label}</Text>
+                {filter === f.key && <Ionicons name="checkmark" size={18} color="#A8D96C" style={{ marginLeft: "auto" }} />}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -293,16 +321,37 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F0F7F0" },
 
   // Filter
-  filterBar: { backgroundColor: "#fff", maxHeight: 56, borderBottomWidth: 1, borderBottomColor: "#D4EDD4" },
-  filterContent: { paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
-  filterChip: {
-    paddingHorizontal: 16, paddingVertical: 6,
-    borderRadius: 20, backgroundColor: "#F0F7F0",
-    borderWidth: 1, borderColor: "#D4EDD4",
+  filterRow: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: "#fff", paddingHorizontal: 16, paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: "#D4EDD4",
   },
-  filterChipActive: { backgroundColor: "#0B3D2E", borderColor: "#0B3D2E" },
-  filterText: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#3E7B27" },
-  filterTextActive: { color: "#fff", fontFamily: "Poppins_700Bold" },
+  filterBtn: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    backgroundColor: "#F0F7F0", borderRadius: 20,
+    paddingHorizontal: 14, paddingVertical: 8,
+    borderWidth: 1, borderColor: "#A8D96C",
+  },
+  filterBtnText: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+  clearFilterBtn: { flexDirection: "row", alignItems: "center", gap: 4 },
+  clearFilterText: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#C62828" },
+  filterCount: { marginLeft: "auto", fontSize: 12, fontFamily: "Inter_400Regular", color: "#888" },
+
+  // Modal
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", alignItems: "center" },
+  modalBox: {
+    backgroundColor: "#fff", borderRadius: 20, padding: 20,
+    width: "80%", elevation: 10,
+  },
+  modalTitle: { fontSize: 16, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 16 },
+  modalOption: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    paddingVertical: 12, paddingHorizontal: 12, borderRadius: 12, marginBottom: 6,
+    backgroundColor: "#F0F7F0",
+  },
+  modalOptionActive: { backgroundColor: "#0B3D2E" },
+  modalOptionText: { fontSize: 14, fontFamily: "Inter_400Regular", color: "#0B3D2E" },
+  modalOptionTextActive: { color: "#fff", fontFamily: "Poppins_700Bold" },
 
   scroll: { padding: 16, paddingBottom: 40 },
 
