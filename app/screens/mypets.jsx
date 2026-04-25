@@ -8,34 +8,56 @@ import { Ionicons } from "@expo/vector-icons";
 import Header from "../../components/Header";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
+import { useApp } from "../../context/AppContext";
 
 export default function MyPetsScreen() {
   const router = useRouter();
-  const [pets, setPets] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [token, setToken] = useState("");
-  const [unblockModal, setUnblockModal] = useState(null); // pet object
+  const [unblockModal, setUnblockModal] = useState(null);
   const [unblockReason, setUnblockReason] = useState("");
   const [unblockLoading, setUnblockLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
+  const { pets, loadPets, setPets } = useApp();
 
-  const fetchPets = async () => {
-    try {
-      const { user, token: t } = await getAuth();
-      setToken(t || "");
-      const encodedEmail = encodeURIComponent(user?.email || "");
-      const res = await fetch(
-        `${BASE_URL}/api/v1/customerappointment/getcustomerpets?email=${encodedEmail}`,
-        { headers: { Authorization: t || "" } }
-      );
-      const data = await res.json();
-      if (data.success) setPets(data.pets || []);
-    } catch (e) {
-      console.log(e);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+  useEffect(() => {
+    loadPets();
+    getAuth().then(({ token: t }) => setToken(t || ""));
+  }, []);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadPets(true);
+    setRefreshing(false);
+  };
+
+  const handleDelete = (pet) => {
+    Alert.alert(
+      "Delete Pet",
+      `Are you sure you want to delete ${pet.name}? This action cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete", style: "destructive",
+          onPress: async () => {
+            setDeletingId(pet._id);
+            try {
+              const res = await fetch(`${BASE_URL}/api/v1/customer/pet/delete/${pet._id}`, {
+                method: "DELETE",
+                headers: { Authorization: token },
+              });
+              const data = await res.json();
+              if (data.success) {
+                setPets((prev) => prev.filter((p) => p._id !== pet._id));
+              } else {
+                Alert.alert("Error", data.message || "Could not delete pet.");
+              }
+            } catch { Alert.alert("Error", "Network error."); }
+            finally { setDeletingId(null); }
+          },
+        },
+      ]
+    );
   };
 
   const handleUnblockRequest = async () => {
@@ -60,9 +82,6 @@ export default function MyPetsScreen() {
     finally { setUnblockLoading(false); }
   };
 
-  useEffect(() => { fetchPets(); }, []);
-  const onRefresh = () => { setRefreshing(true); fetchPets(); };
-
   const calculateAge = (dob) => {
     if (!dob) return "N/A";
     const today = new Date();
@@ -73,14 +92,6 @@ export default function MyPetsScreen() {
     return months <= 0 ? "< 1 month" : `${months} months`;
   };
 
-  if (loading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#0B3D2E" />
-      </View>
-    );
-  }
-
   return (
     <View style={styles.container}>
       <Header title="My Pets" showBack />
@@ -89,7 +100,6 @@ export default function MyPetsScreen() {
         contentContainerStyle={styles.scroll}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0B3D2E" />}
       >
-        {/* Add Pet Button */}
         <TouchableOpacity style={styles.addBtn} onPress={() => router.push("/(tabs)/Pet/PetForm")} activeOpacity={0.8}>
           <View style={styles.addBtnIcon}>
             <Ionicons name="add" size={22} color="#fff" />
@@ -98,7 +108,6 @@ export default function MyPetsScreen() {
           <Ionicons name="chevron-forward" size={18} color="#A8D96C" />
         </TouchableOpacity>
 
-        {/* Pets List */}
         {pets.length === 0 ? (
           <View style={styles.emptyBox}>
             <Ionicons name="paw" size={48} color="#3E7B27" style={{ marginBottom: 12 }} />
@@ -111,7 +120,6 @@ export default function MyPetsScreen() {
         ) : (
           pets.map((pet, i) => (
             <View key={i} style={styles.petCard}>
-              {/* Card Header */}
               <View style={styles.cardHeader}>
                 {pet.image ? (
                   <Image source={{ uri: pet.image }} style={styles.petAvatarImg} />
@@ -134,43 +142,36 @@ export default function MyPetsScreen() {
                 >
                   <Ionicons name="pencil" size={15} color="#0B3D2E" />
                 </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.deleteBtn}
+                  onPress={() => handleDelete(pet)}
+                  activeOpacity={0.8}
+                  disabled={deletingId === pet._id}
+                >
+                  {deletingId === pet._id
+                    ? <ActivityIndicator size="small" color="#C62828" />
+                    : <Ionicons name="trash-outline" size={15} color="#C62828" />}
+                </TouchableOpacity>
               </View>
 
               <View style={styles.divider} />
 
-              {/* Pet Details Grid */}
               <View style={styles.detailsGrid}>
-                <View style={styles.detailItem}>
-                  <Text style={styles.detailLabel}>Species</Text>
-                  <Text style={styles.detailValue}>{pet.species || "Dog"}</Text>
-                </View>
-                <View style={styles.detailItem}>
-                  <Text style={styles.detailLabel}>Sex</Text>
-                  <Text style={styles.detailValue}>{pet.sex || "N/A"}</Text>
-                </View>
-                <View style={styles.detailItem}>
-                  <Text style={styles.detailLabel}>Color</Text>
-                  <Text style={styles.detailValue}>{pet.color || "N/A"}</Text>
-                </View>
-                <View style={styles.detailItem}>
-                  <Text style={styles.detailLabel}>Neutered</Text>
-                  <Text style={styles.detailValue}>{pet.neutered ? "Yes ✓" : "No"}</Text>
-                </View>
-                <View style={styles.detailItem}>
-                  <Text style={styles.detailLabel}>DOB</Text>
-                  <Text style={styles.detailValue}>
-                    {pet.dob ? new Date(pet.dob).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "N/A"}
-                  </Text>
-                </View>
-                <View style={styles.detailItem}>
-                  <Text style={styles.detailLabel}>Registered</Text>
-                  <Text style={styles.detailValue}>
-                    {pet.registrationDate ? new Date(pet.registrationDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "N/A"}
-                  </Text>
-                </View>
+                {[
+                  { label: "Species", value: pet.species || "Dog" },
+                  { label: "Sex", value: pet.sex || "N/A" },
+                  { label: "Color", value: pet.color || "N/A" },
+                  { label: "Neutered", value: pet.neutered ? "Yes ✓" : "No" },
+                  { label: "DOB", value: pet.dob ? new Date(pet.dob).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "N/A" },
+                  { label: "Registered", value: pet.registrationDate ? new Date(pet.registrationDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "N/A" },
+                ].map((d) => (
+                  <View key={d.label} style={styles.detailItem}>
+                    <Text style={styles.detailLabel}>{d.label}</Text>
+                    <Text style={styles.detailValue}>{d.value}</Text>
+                  </View>
+                ))}
               </View>
 
-              {/* Vaccinations */}
               {pet.vaccinations?.length > 0 && (
                 <>
                   <View style={styles.divider} />
@@ -186,38 +187,26 @@ export default function MyPetsScreen() {
                 </>
               )}
 
-              {/* Book Service */}
               {pet.isBlacklisted ? (
                 <View style={styles.bookBtnDisabled}>
                   <Ionicons name="ban" size={16} color="#C62828" />
                   <Text style={styles.bookBtnDisabledText}>Booking Disabled (Blacklisted)</Text>
                 </View>
               ) : (
-                <TouchableOpacity
-                  style={styles.bookBtn}
-                  onPress={() => router.push("/(tabs)/services")}
-                  activeOpacity={0.8}
-                >
+                <TouchableOpacity style={styles.bookBtn} onPress={() => router.push("/(tabs)/services")} activeOpacity={0.8}>
                   <Ionicons name="calendar-outline" size={16} color="#fff" />
                   <Text style={styles.bookBtnText}>Book a Service</Text>
                 </TouchableOpacity>
               )}
 
-              {/* Blacklist Banner + Unblock Request */}
               {pet.isBlacklisted && (
                 <View style={styles.blacklistBox}>
                   <View style={styles.blacklistHeader}>
                     <Ionicons name="ban" size={16} color="#C62828" />
                     <Text style={styles.blacklistTitle}>This pet is blacklisted</Text>
                   </View>
-                  {pet.blacklistReason ? (
-                    <Text style={styles.blacklistReason}>Reason: {pet.blacklistReason}</Text>
-                  ) : null}
-                  <TouchableOpacity
-                    style={styles.unblockBtn}
-                    onPress={() => { setUnblockModal(pet); setUnblockReason(""); }}
-                    activeOpacity={0.8}
-                  >
+                  {pet.blacklistReason ? <Text style={styles.blacklistReason}>Reason: {pet.blacklistReason}</Text> : null}
+                  <TouchableOpacity style={styles.unblockBtn} onPress={() => { setUnblockModal(pet); setUnblockReason(""); }} activeOpacity={0.8}>
                     <Ionicons name="mail-outline" size={15} color="#0B3D2E" />
                     <Text style={styles.unblockBtnText}>Request Unblock</Text>
                   </TouchableOpacity>
@@ -228,7 +217,6 @@ export default function MyPetsScreen() {
         )}
       </ScrollView>
 
-      {/* Unblock Request Modal */}
       <Modal visible={!!unblockModal} transparent animationType="slide" onRequestClose={() => setUnblockModal(null)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalSheet}>
@@ -279,7 +267,6 @@ export default function MyPetsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F0F7F0" },
-  centered: { flex: 1, justifyContent: "center", alignItems: "center" },
   scroll: { padding: 16, paddingBottom: 40 },
 
   addBtn: {
@@ -298,40 +285,35 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff", borderRadius: 16,
     borderWidth: 1, borderColor: "#D4EDD4",
   },
-  emptyEmoji: { fontSize: 56, marginBottom: 12 },
   emptyTitle: { fontSize: 18, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 6 },
   emptySub: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#999", marginBottom: 20 },
-  emptyBtn: {
-    backgroundColor: "#0B3D2E", paddingHorizontal: 24, paddingVertical: 10, borderRadius: 20,
-  },
+  emptyBtn: { backgroundColor: "#0B3D2E", paddingHorizontal: 24, paddingVertical: 10, borderRadius: 20 },
   emptyBtnText: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#fff" },
 
   petCard: {
     backgroundColor: "#fff", borderRadius: 16, padding: 16,
-    marginBottom: 14, elevation: 2,
-    borderWidth: 1, borderColor: "#D4EDD4",
+    marginBottom: 14, elevation: 2, borderWidth: 1, borderColor: "#D4EDD4",
   },
   cardHeader: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
   petAvatar: {
     width: 52, height: 52, borderRadius: 26,
-    backgroundColor: "#A8D96C",
-    justifyContent: "center", alignItems: "center", marginRight: 12,
+    backgroundColor: "#A8D96C", justifyContent: "center", alignItems: "center", marginRight: 12,
   },
-  petAvatarImg: {
-    width: 52, height: 52, borderRadius: 26, marginRight: 12,
-  },
+  petAvatarImg: { width: 52, height: 52, borderRadius: 26, marginRight: 12 },
   petAvatarText: { fontSize: 22, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
   petHeaderInfo: { flex: 1 },
   petName: { fontSize: 17, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 2 },
   petBreed: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#666" },
-  ageBadge: {
-    backgroundColor: "#E8F5E8", paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20,
-  },
+  ageBadge: { backgroundColor: "#E8F5E8", paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
   ageText: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#3E7B27" },
   editBtn: {
-    width: 34, height: 34, borderRadius: 10,
-    backgroundColor: "#A8D96C",
+    width: 34, height: 34, borderRadius: 10, backgroundColor: "#A8D96C",
     justifyContent: "center", alignItems: "center", marginLeft: 8,
+  },
+  deleteBtn: {
+    width: 34, height: 34, borderRadius: 10, backgroundColor: "#FFF0F0",
+    justifyContent: "center", alignItems: "center", marginLeft: 6,
+    borderWidth: 1, borderColor: "#FFCDD2",
   },
 
   divider: { height: 1, backgroundColor: "#E8F5E8", marginVertical: 12 },
@@ -346,10 +328,7 @@ const styles = StyleSheet.create({
 
   vaccTitle: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 8 },
   vaccRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  vaccChip: {
-    backgroundColor: "#E8F5E8", borderRadius: 10,
-    paddingHorizontal: 10, paddingVertical: 6,
-  },
+  vaccChip: { backgroundColor: "#E8F5E8", borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 },
   vaccName: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
   vaccDose: { fontSize: 10, fontFamily: "Inter_400Regular", color: "#666" },
 

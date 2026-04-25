@@ -6,6 +6,7 @@ import {
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
 
@@ -35,6 +36,7 @@ const emptyForm = () => ({
 });
 
 export default function AdminServices() {
+  const router = useRouter();
   const [services, setServices] = useState(FALLBACK_SERVICES);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -132,6 +134,9 @@ export default function AdminServices() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.8}>
+          <Ionicons name="close" size={22} color="#fff" />
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>Services</Text>
         <TouchableOpacity style={styles.addBtn} onPress={openAdd} activeOpacity={0.8}>
           <Ionicons name="add" size={20} color="#0B3D2E" />
@@ -403,9 +408,10 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: "#0B3D2E", paddingHorizontal: 20,
     paddingTop: 52, paddingBottom: 16,
-    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+    flexDirection: "row", alignItems: "center",
   },
-  headerTitle: { fontSize: 20, fontFamily: "Poppins_700Bold", color: "#fff" },
+  backBtn: { width: 36, height: 36, justifyContent: "center" },
+  headerTitle: { flex: 1, fontSize: 20, fontFamily: "Poppins_700Bold", color: "#fff", textAlign: "center" },
   addBtn: {
     flexDirection: "row", alignItems: "center", gap: 4,
     backgroundColor: "#A8D96C", paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,

@@ -15,7 +15,7 @@ const fmtDate = (d) =>
 let _cachedPets = null;
 let _cachedToken = "";
 
-export default function BlacklistedPets() {
+export default function AdminBlacklisted() {
   const router = useRouter();
   const [pets, setPets] = useState(_cachedPets || []);
   const [loading, setLoading] = useState(!_cachedPets);
@@ -43,7 +43,7 @@ export default function BlacklistedPets() {
   const handleRemove = (pet) => {
     Alert.alert(
       "Remove from Blacklist",
-      `Remove ${pet.name} from blacklist?`,
+      `Remove ${pet.name} from blacklist? This will allow them to be served again.`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -77,23 +77,24 @@ export default function BlacklistedPets() {
 
   return (
     <View style={s.container}>
-      {/* Header */}
       <View style={s.header}>
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
           <Ionicons name="close" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={s.headerTitle}>🚫 Blacklisted Pets</Text>
+        <View style={s.adminBadge}>
+          <Ionicons name="shield-checkmark" size={12} color="#A8D96C" />
+          <Text style={s.adminBadgeTxt}>Admin</Text>
+        </View>
       </View>
 
-      {/* Warning Banner */}
       <View style={s.warningBanner}>
         <Ionicons name="warning" size={18} color="#B8860B" />
         <Text style={s.warningText}>
-          Blacklisted pets should NOT be served. Contact admin if unsure.
+          As admin you can remove pets from blacklist. Total: {pets.length} blacklisted
         </Text>
       </View>
 
-      {/* Search */}
       <View style={s.searchWrapper}>
         <View style={s.searchBox}>
           <Ionicons name="search-outline" size={16} color="#999" />
@@ -124,14 +125,11 @@ export default function BlacklistedPets() {
             <View style={s.emptyBox}>
               <Ionicons name="checkmark-circle" size={56} color="#A8D96C" />
               <Text style={s.emptyTitle}>No Blacklisted Pets</Text>
-              <Text style={s.emptySub}>
-                {search ? "No results for your search" : "All pets are in good standing"}
-              </Text>
+              <Text style={s.emptySub}>{search ? "No results for your search" : "All pets are in good standing"}</Text>
             </View>
           ) : (
             filtered.map((pet) => (
               <View key={pet._id} style={s.card}>
-                {/* Card Header */}
                 <View style={s.cardHeader}>
                   <View style={s.avatar}>
                     <Text style={s.avatarTxt}>{pet.name?.slice(0, 2).toUpperCase()}</Text>
@@ -150,7 +148,6 @@ export default function BlacklistedPets() {
 
                 <View style={s.divider} />
 
-                {/* Reason */}
                 {pet.blacklistReason ? (
                   <View style={s.reasonBox}>
                     <Ionicons name="alert-circle" size={14} color="#C62828" />
@@ -158,7 +155,6 @@ export default function BlacklistedPets() {
                   </View>
                 ) : null}
 
-                {/* Meta */}
                 <View style={s.metaRow}>
                   {pet.blacklistedAt && (
                     <View style={s.metaItem}>
@@ -174,7 +170,6 @@ export default function BlacklistedPets() {
                   )}
                 </View>
 
-                {/* Owner Info */}
                 {pet.owner && (
                   <View style={s.ownerBox}>
                     <View style={s.ownerRow}>
@@ -190,11 +185,22 @@ export default function BlacklistedPets() {
                   </View>
                 )}
 
-                {/* Remove Button — Admin only */}
-                <View style={s.adminOnlyBox}>
-                  <Ionicons name="lock-closed-outline" size={13} color="#999" />
-                  <Text style={s.adminOnlyTxt}>Only admin can remove from blacklist</Text>
-                </View>
+                {/* Admin Remove Button */}
+                <TouchableOpacity
+                  style={[s.removeBtn, removingId === pet._id && { opacity: 0.6 }]}
+                  onPress={() => handleRemove(pet)}
+                  disabled={removingId === pet._id}
+                  activeOpacity={0.8}
+                >
+                  {removingId === pet._id ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons name="checkmark-circle-outline" size={16} color="#fff" />
+                      <Text style={s.removeBtnTxt}>Remove from Blacklist</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
               </View>
             ))
           )}
@@ -207,7 +213,6 @@ export default function BlacklistedPets() {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FFF5F5" },
-
   header: {
     backgroundColor: "#0B3D2E", paddingHorizontal: 20,
     paddingTop: 52, paddingBottom: 16,
@@ -215,73 +220,36 @@ const s = StyleSheet.create({
   },
   backBtn: { width: 36, height: 36, justifyContent: "center" },
   headerTitle: { fontSize: 20, fontFamily: "Poppins_700Bold", color: "#fff", flex: 1 },
-  headerSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#A8D96C", marginTop: 2 },
-
-  warningBanner: {
-    flexDirection: "row", alignItems: "center", gap: 10,
-    backgroundColor: "#FFF9E6", paddingHorizontal: 16, paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: "#FFE082",
-  },
+  adminBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(168,217,108,0.2)", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
+  adminBadgeTxt: { fontSize: 10, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
+  warningBanner: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#FFF9E6", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#FFE082" },
   warningText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", color: "#B8860B" },
-
   searchWrapper: { backgroundColor: "#fff", padding: 12, borderBottomWidth: 1, borderBottomColor: "#FFCDD2" },
-  searchBox: {
-    flexDirection: "row", alignItems: "center", gap: 8,
-    backgroundColor: "#FFF5F5", borderRadius: 12, paddingHorizontal: 12, height: 44,
-    borderWidth: 1, borderColor: "#FFCDD2",
-  },
+  searchBox: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#FFF5F5", borderRadius: 12, paddingHorizontal: 12, height: 44, borderWidth: 1, borderColor: "#FFCDD2" },
   searchInput: { flex: 1, fontSize: 14, fontFamily: "Inter_400Regular", color: "#1A1A1A" },
-
   scroll: { padding: 16, paddingBottom: 40 },
-
   emptyBox: { alignItems: "center", paddingVertical: 60, gap: 10 },
   emptyTitle: { fontSize: 18, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
   emptySub: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#999" },
-
-  card: {
-    backgroundColor: "#fff", borderRadius: 16, padding: 14,
-    marginBottom: 12, elevation: 3,
-    borderWidth: 1.5, borderColor: "#FFCDD2",
-  },
+  card: { backgroundColor: "#fff", borderRadius: 16, padding: 14, marginBottom: 12, elevation: 3, borderWidth: 1.5, borderColor: "#FFCDD2" },
   cardHeader: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 10 },
-  avatar: {
-    width: 50, height: 50, borderRadius: 25,
-    backgroundColor: "#C62828", justifyContent: "center", alignItems: "center",
-  },
+  avatar: { width: 50, height: 50, borderRadius: 25, backgroundColor: "#C62828", justifyContent: "center", alignItems: "center" },
   avatarTxt: { fontSize: 17, fontFamily: "Poppins_700Bold", color: "#fff" },
   cardInfo: { flex: 1 },
   nameRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 2 },
   petName: { fontSize: 16, fontFamily: "Poppins_700Bold", color: "#C62828" },
-  blackBadge: {
-    flexDirection: "row", alignItems: "center", gap: 3,
-    backgroundColor: "#C62828", paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8,
-  },
+  blackBadge: { flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: "#C62828", paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8 },
   blackBadgeTxt: { fontSize: 9, fontFamily: "Poppins_700Bold", color: "#fff" },
   petBreed: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#666" },
-
   divider: { height: 1, backgroundColor: "#FFEBEE", marginBottom: 10 },
-
-  reasonBox: {
-    flexDirection: "row", alignItems: "flex-start", gap: 8,
-    backgroundColor: "#FFEBEE", borderRadius: 10, padding: 10, marginBottom: 10,
-  },
+  reasonBox: { flexDirection: "row", alignItems: "flex-start", gap: 8, backgroundColor: "#FFEBEE", borderRadius: 10, padding: 10, marginBottom: 10 },
   reasonText: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", color: "#C62828" },
-
   metaRow: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginBottom: 10 },
   metaItem: { flexDirection: "row", alignItems: "center", gap: 4 },
   metaText: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#999" },
-
-  ownerBox: {
-    backgroundColor: "#F8FFF8", borderRadius: 10, padding: 10,
-    marginBottom: 10, gap: 4, borderWidth: 1, borderColor: "#D4EDD4",
-  },
+  ownerBox: { backgroundColor: "#F8FFF8", borderRadius: 10, padding: 10, marginBottom: 12, gap: 4, borderWidth: 1, borderColor: "#D4EDD4" },
   ownerRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   ownerText: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#0B3D2E" },
-
-  adminOnlyBox: {
-    flexDirection: "row", alignItems: "center", gap: 6,
-    backgroundColor: "#F5F5F5", borderRadius: 10, padding: 10,
-    borderWidth: 1, borderColor: "#E0E0E0",
-  },
-  adminOnlyTxt: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#999" },
+  removeBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: "#3E7B27", borderRadius: 12, paddingVertical: 12 },
+  removeBtnTxt: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#fff" },
 });

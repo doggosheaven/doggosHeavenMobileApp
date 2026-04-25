@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  ActivityIndicator, RefreshControl, Alert, Modal, FlatList,
+  ActivityIndicator, RefreshControl, Alert, Modal, FlatList, Platform, StatusBar,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
@@ -9,36 +9,59 @@ import { useRouter } from "expo-router";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
 
+const STATUS_BAR_HEIGHT = Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 44;
+
 const STATUS_COLOR = { pending: "#F59E0B", confirmed: "#3E7B27", completed: "#0B3D2E", cancelled: "#C62828" };
 const STATUS_BG    = { pending: "#FFF9E6", confirmed: "#E8F5E8", completed: "#E8F5E8", cancelled: "#FFEBEE" };
 
+let _dashboardLoaded = false;
+let _cachedData = null;
+let _cachedUser = null;
+let _cachedToken = "";
+let _cachedUnread = 0;
+let _cachedVisitsCount = 0;
+
 export default function StaffDashboard() {
   const router = useRouter();
-  const [data, setData] = useState(null);
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState(_cachedData);
+  const [user, setUser] = useState(_cachedUser);
+  const [loading, setLoading] = useState(!_dashboardLoaded);
   const [refreshing, setRefreshing] = useState(false);
-  const [token, setToken] = useState("");
-  const [unreadCount, setUnreadCount] = useState(0);
+  const isFetching = useRef(false);
+  const [token, setToken] = useState(_cachedToken);
+  const [unreadCount, setUnreadCount] = useState(_cachedUnread);
+  const [totalVisitsCount, setTotalVisitsCount] = useState(_cachedVisitsCount);
   const [calModal, setCalModal] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [calMonth, setCalMonth] = useState(new Date());
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (force = false) => {
+    if (isFetching.current) return;
+    if (_dashboardLoaded && !force) return;
+    isFetching.current = true;
     try {
       const { token: t, user: u } = await getAuth();
       setToken(t || "");
       setUser(u);
-      const [statsRes, alertRes] = await Promise.all([
+      const [statsRes, alertRes, allVisitsRes] = await Promise.all([
         fetch(`${BASE_URL}/api/v1/auth/mystats`, { headers: { Authorization: t || "" } }),
         fetch(`${BASE_URL}/api/v1/alerts/getall`, { headers: { Authorization: t || "" } }),
+        fetch(`${BASE_URL}/api/v1/visit/getvisitlist`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: t || "" },
+        }),
       ]);
       const json = await statsRes.json();
       const alertJson = await alertRes.json();
-      if (json.success) setData(json);
-      if (alertJson.success) setUnreadCount(alertJson.unreadCount || 0);
-    } catch (e) { console.log(e); }
-    finally { setLoading(false); setRefreshing(false); }
+      const allVisitsJson = await allVisitsRes.json();
+      if (json.success) { setData(json); _cachedData = json; }
+      if (alertJson.success) { const u = alertJson.unreadCount || 0; setUnreadCount(u); _cachedUnread = u; }
+      if (allVisitsJson.success) { const c = (allVisitsJson.List || []).length; setTotalVisitsCount(c); _cachedVisitsCount = c; }
+      _cachedToken = t || "";
+      _cachedUser = u;
+      _dashboardLoaded = true;
+    } catch (e) { if (__DEV__) console.log(e); }
+    finally { setLoading(false); setRefreshing(false); isFetching.current = false; }
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -70,14 +93,13 @@ export default function StaffDashboard() {
       });
       const json = await res.json();
       if (json.success) {
-        load();
+        _dashboardLoaded = false;
+        load(true);
         Alert.alert("✅ Done", "Appointment marked as completed.");
       } else Alert.alert("Error", json.message);
     } catch { Alert.alert("Error", "Network error"); }
   };
 
-  const fmtDate = (d) =>
-    d ? new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
   const fmtDateTime = (d) =>
     d ? new Date(d).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
 
@@ -87,14 +109,13 @@ export default function StaffDashboard() {
   const isToday = isSameDay(selectedDate, new Date());
 
   const allAppts = data?.todayAppointments || [];
-  // Filter all appointments by selected date
   const todayAppts = isToday
-    ? allAppts
+    ? [...allAppts].sort((a, b) => new Date(b.appointmentDate) - new Date(a.appointmentDate))
     : (data?.allAppointments || []).filter(a => isSameDay(a.appointmentDate, selectedDate));
 
-  const recentVisits = (data?.recentVisits || []).filter(v =>
-    isToday ? true : isSameDay(v.createdAt, selectedDate)
-  );
+  const recentVisits = [...(data?.recentVisits || [])]
+    .filter(v => isToday ? true : isSameDay(v.createdAt, selectedDate))
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
   // Calendar helpers
   const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
@@ -111,26 +132,26 @@ export default function StaffDashboard() {
   const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const DAY_NAMES = ["Su","Mo","Tu","We","Th","Fr","Sa"];
 
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good Morning" : hour < 17 ? "Good Afternoon" : "Good Evening";
+
   return (
     <View style={s.container}>
-      {/* Header */}
-      <View style={s.header}>
-        <View>
-          <Text style={s.greeting}>Welcome back 👋</Text>
-          <Text style={s.name}>{data?.staff?.fullName || user?.fullName || "Staff"}</Text>
-          <TouchableOpacity onPress={() => setCalModal(true)} activeOpacity={0.7}>
-            <Text style={s.headerDate}>
+      {/* Hero Header */}
+      <View style={s.hero}>
+        <View style={s.heroLeft}>
+          <Text style={s.heroGreeting}>{greeting} 👋</Text>
+          <Text style={s.heroName}>{data?.staff?.fullName || user?.fullName || "Staff"}</Text>
+          <TouchableOpacity onPress={() => setCalModal(true)} activeOpacity={0.7} style={s.heroDateRow}>
+            <Ionicons name="calendar-outline" size={12} color="rgba(168,217,108,0.8)" />
+            <Text style={s.heroDate}>
               {isToday
-                ? `Today, ${selectedDate.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`
-                : selectedDate.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
+                ? new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })
+                : selectedDate.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
             </Text>
           </TouchableOpacity>
         </View>
-        <View style={s.headerRight}>
-          <TouchableOpacity style={s.calBtn} onPress={() => setCalModal(true)} activeOpacity={0.8}>
-            <Ionicons name="calendar-outline" size={20} color="#A8D96C" />
-            {!isToday && <View style={s.calDot} />}
-          </TouchableOpacity>
+        <View style={s.heroRight}>
           <TouchableOpacity style={s.bellBtn} onPress={() => router.push("/staff/notifications")} activeOpacity={0.8}>
             <Ionicons name="notifications-outline" size={22} color="#fff" />
             {unreadCount > 0 && (
@@ -139,9 +160,9 @@ export default function StaffDashboard() {
               </View>
             )}
           </TouchableOpacity>
-          <View style={s.roleBadge}>
-            <Ionicons name="person-circle-outline" size={14} color="#A8D96C" />
-            <Text style={s.roleText}>Staff</Text>
+          <View style={s.heroBadge}>
+            <Ionicons name="shield-checkmark-outline" size={11} color="#A8D96C" />
+            <Text style={s.heroBadgeTxt}>Doggos Heaven</Text>
           </View>
         </View>
       </View>
@@ -152,11 +173,11 @@ export default function StaffDashboard() {
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={s.scroll}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor="#0B3D2E" />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} tintColor="#A8D96C" />}
         >
           {/* Date Filter Banner */}
           {!isToday && (
-            <TouchableOpacity style={s.dateBanner} onPress={() => setCalModal(true)} activeOpacity={0.8}>
+            <TouchableOpacity style={s.dateBanner} onPress={() => setCalModal(true)} activeOpacity={0.8} >
               <Ionicons name="calendar" size={15} color="#B45309" />
               <Text style={s.dateBannerTxt}>
                 Showing: {selectedDate.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
@@ -168,15 +189,15 @@ export default function StaffDashboard() {
           )}
 
           {/* Stats Grid */}
-          <View style={s.statsGrid}>
+          <View style={s.statsGrid} >
             {[
               {
                 label: "Total Visits",
                 subLabel: "All time",
-                value: data?.stats?.totalVisits ?? 0,
+                value: totalVisitsCount,
                 icon: "paw",
                 color: "#0B3D2E",
-                onPress: () => router.push("/staff/totalvisits"),
+                onPress: () => router.push({ pathname: "/staff/totalvisits", params: { showAll: "1" } }),
               },
               {
                 label: "Boardings",
@@ -184,28 +205,28 @@ export default function StaffDashboard() {
                 value: data?.stats?.totalBoardings ?? 0,
                 icon: "home",
                 color: "#3E7B27",
-                onPress: () => router.push("/staff/totalvisits"),
+                onPress: () => router.push("/staff/boardingsubscriptions"),
               },
               {
                 label: isToday ? "Today" : selectedDate.toLocaleDateString("en-IN", { day: "numeric", month: "short" }),
                 subLabel: "Appointments",
                 value: todayAppts.length,
                 icon: "calendar",
-                color: "#F59E0B",
-                onPress: () => router.push("/staff/appointments"),
+                color: "#2D6A4F",
+                onPress: () => router.push({ pathname: "/staff/appointments", params: { filterDate: new Date().toISOString().split("T")[0] } }),
               },
               {
-                label: "Services Done",
-                subLabel: "Unique types",
-                value: (data?.providedServiceIds || []).length,
+                label: "Service Types",
+                subLabel: "Available",
+                value: (data?.allServices || []).length,
                 icon: "ribbon",
                 color: "#1A5C3A",
                 onPress: () => router.push("/staff/myservices"),
               },
             ].map((stat) => (
-              <TouchableOpacity key={stat.label} style={s.statCard} onPress={stat.onPress} activeOpacity={0.8}>
-                <View style={[s.statIconBox, { backgroundColor: stat.color + "20" }]}>
-                  <Ionicons name={stat.icon} size={22} color={stat.color} />
+              <TouchableOpacity key={stat.label} style={[s.statCard, { backgroundColor: stat.color }]} onPress={stat.onPress} activeOpacity={0.8}>
+                <View style={s.statIconBox}>
+                  <Ionicons name={stat.icon} size={22} color="#A8D96C" />
                 </View>
                 <Text style={s.statValue}>{stat.value}</Text>
                 <Text style={s.statLabel}>{stat.label}</Text>
@@ -215,7 +236,9 @@ export default function StaffDashboard() {
           </View>
 
           {/* Quick Actions */}
-          <Text style={s.sectionTitle}>Quick Actions</Text>
+          <View style={s.sectionRow}>
+            <Text style={s.sectionTitle}>Quick Actions</Text>
+          </View>
           <View style={s.actionsGrid}>
             {[
               { label: "My Bookings",  icon: "calendar-outline",      onPress: () => router.push("/staff/appointments") },
@@ -223,10 +246,10 @@ export default function StaffDashboard() {
               { label: "Inventory",    icon: "cube-outline",           onPress: () => router.push("/staff/inventory") },
               { label: "My Services",  icon: "ribbon-outline",         onPress: () => router.push("/staff/myservices") },
               { label: "Reminders",    icon: "notifications-outline",  onPress: () => router.push("/staff/reminders") },
-              { label: "Walk-in Bill", icon: "receipt-outline",         onPress: () => router.push("/staff/billing") },
+              { label: "Walk-in Bill", icon: "receipt-outline",        onPress: () => router.push("/staff/billing") },
+              { label: "Prescription", icon: "medkit-outline",          onPress: () => router.push("/staff/prescription") },
               { label: "Deboard",      icon: "exit-outline",           onPress: () => router.push("/staff/deboard") },
               { label: "Blacklisted",  icon: "ban-outline",            onPress: () => router.push("/staff/blacklisted") },
-              { label: "Boarding Subs",icon: "home-outline",           onPress: () => router.push("/staff/boardingsubscriptions") },
             ].map((a) => (
               <TouchableOpacity key={a.label} style={s.actionCard} onPress={a.onPress} activeOpacity={0.8}>
                 <View style={s.actionIconBox}>
@@ -237,34 +260,22 @@ export default function StaffDashboard() {
             ))}
           </View>
 
-          {/* Add Visit Quick Section */}
-          <Text style={s.sectionTitle}>Add Visit</Text>
-          <TouchableOpacity
-            style={s.addVisitBtn}
-            onPress={() => router.push("/staff/totalvisits")}
-            activeOpacity={0.8}
-          >
-            <View style={s.addVisitIcon}>
-              <Ionicons name="add-circle" size={28} color="#A8D96C" />
-            </View>
-            <View style={s.addVisitInfo}>
-              <Text style={s.addVisitTitle}>Record a Visit</Text>
-              <Text style={s.addVisitSub}>Select a pet & service to log a new visit</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#A8D96C" />
-          </TouchableOpacity>
-
           {/* Today's Appointments */}
-          <Text style={s.sectionTitle}>
-            {isToday ? "Today's Appointments" : `Appointments — ${selectedDate.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`}
-          </Text>
+          <View style={s.sectionRow}>
+            <Text style={s.sectionTitle}>
+              {isToday ? "Today's Appointments" : `Appointments — ${selectedDate.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`}
+            </Text>
+            <TouchableOpacity onPress={() => router.push({ pathname: "/staff/appointments", params: { filterDate: selectedDate.toISOString().split("T")[0] } })}>
+              <Text style={s.sectionLink}>View All →</Text>
+            </TouchableOpacity>
+          </View>
           {todayAppts.length === 0 ? (
             <View style={s.emptyBox}>
               <Ionicons name="calendar-outline" size={40} color="#A8D96C" />
               <Text style={s.emptyText}>No appointments today</Text>
             </View>
           ) : (
-            todayAppts.map((appt) => (
+            todayAppts.slice(0, 3).map((appt) => (
               <View key={appt._id} style={s.card}>
                 <View style={s.cardHeader}>
                   <View style={s.cardHeaderLeft}>
@@ -306,14 +317,19 @@ export default function StaffDashboard() {
           )}
 
           {/* Recent Visits */}
-          <Text style={s.sectionTitle}>{isToday ? "Recent Visits" : `Visits — ${selectedDate.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`}</Text>
+          <View style={s.sectionRow}>
+            <Text style={s.sectionTitle}>{isToday ? "Recent Visits" : `Visits — ${selectedDate.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`}</Text>
+            <TouchableOpacity onPress={() => router.push("/staff/totalvisits")}>
+              <Text style={s.sectionLink}>View All →</Text>
+            </TouchableOpacity>
+          </View>
           {recentVisits.length === 0 ? (
             <View style={s.emptyBox}>
               <Ionicons name="document-text-outline" size={40} color="#A8D96C" />
               <Text style={s.emptyText}>No visits recorded yet</Text>
             </View>
           ) : (
-            recentVisits.map((v, i) => (
+            recentVisits.slice(0, 3).map((v, i) => (
               <View key={v._id || i} style={s.card}>
                 <View style={s.cardHeader}>
                   <View style={s.cardHeaderLeft}>
@@ -415,63 +431,78 @@ export default function StaffDashboard() {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F0F7F0" },
 
-  header: {
-    backgroundColor: "#0B3D2E", paddingHorizontal: 20,
-    paddingTop: 52, paddingBottom: 20,
+  hero: {
+    backgroundColor: "#0B3D2E",
+    paddingHorizontal: 20, paddingTop: STATUS_BAR_HEIGHT + 20, paddingBottom: 36,
     flexDirection: "row", justifyContent: "space-between", alignItems: "center",
   },
-  greeting: { fontSize: 12, color: "#A8D96C", fontFamily: "Inter_400Regular" },
-  name: { fontSize: 20, color: "#fff", fontFamily: "Poppins_700Bold" },
-  headerDate: { fontSize: 12, color: "rgba(168,217,108,0.85)", fontFamily: "Inter_400Regular", marginTop: 2 },
-  headerRight: { flexDirection: "row", alignItems: "center", gap: 10 },
-  calBtn: { position: "relative", padding: 6, backgroundColor: "rgba(168,217,108,0.15)", borderRadius: 10 },
+  heroLeft: { flex: 1 },
+  heroGreeting: { fontSize: 12, color: "#A8D96C", fontFamily: "Inter_400Regular", marginBottom: 2 },
+  heroName: { fontSize: 22, color: "#fff", fontFamily: "Poppins_700Bold", marginBottom: 6 },
+  heroDateRow: { flexDirection: "row", alignItems: "center", gap: 5 },
+  heroDate: { fontSize: 11, color: "rgba(168,217,108,0.8)", fontFamily: "Inter_400Regular" },
+  heroBadge: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    backgroundColor: "rgba(168,217,108,0.15)",
+    paddingHorizontal: 10, paddingVertical: 5,
+    borderRadius: 20,
+  },
+  heroBadgeTxt: { fontSize: 11, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
+  heroRight: { flexDirection: "column", alignItems: "flex-end", gap: 10 },
+  heroTopBtns: { flexDirection: "row", alignItems: "center", gap: 8 },
+  calBtn: { position: "relative", padding: 8, backgroundColor: "rgba(168,217,108,0.15)", borderRadius: 12 },
   calDot: { position: "absolute", top: 4, right: 4, width: 7, height: 7, borderRadius: 4, backgroundColor: "#F59E0B", borderWidth: 1, borderColor: "#0B3D2E" },
-  bellBtn: { position: "relative", padding: 6, backgroundColor: "rgba(168,217,108,0.15)", borderRadius: 10 },
+  bellBtn: { position: "relative", padding: 8, backgroundColor: "rgba(168,217,108,0.15)", borderRadius: 12 },
   bellBadge: {
-    position: "absolute", top: -4, right: -4,
+    position: "absolute", top: -3, right: -3,
     backgroundColor: "#C62828", borderRadius: 10,
-    minWidth: 18, height: 18, justifyContent: "center", alignItems: "center",
+    minWidth: 17, height: 17, justifyContent: "center", alignItems: "center",
     paddingHorizontal: 3, borderWidth: 1.5, borderColor: "#0B3D2E",
   },
-  bellBadgeTxt: { fontSize: 9, fontFamily: "Poppins_700Bold", color: "#fff" },
+  bellBadgeTxt: { fontSize: 8, fontFamily: "Poppins_700Bold", color: "#fff" },
   roleBadge: {
-    flexDirection: "row", alignItems: "center", gap: 6,
+    flexDirection: "row", alignItems: "center", gap: 5,
     backgroundColor: "rgba(168,217,108,0.15)",
-    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20,
+    paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20,
   },
   roleText: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
 
-  scroll: { padding: 16, paddingBottom: 40 },
+  scroll: { paddingBottom: 48 },
 
-  dateBanner: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#FFF9E6", borderRadius: 12, padding: 10, marginBottom: 14, borderWidth: 1, borderColor: "#FDE68A" },
+  dateBanner: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#FFF9E6", borderRadius: 12, padding: 10, marginHorizontal: 16, marginTop: 16, marginBottom: 4, borderWidth: 1, borderColor: "#FDE68A" },
   dateBannerTxt: { flex: 1, fontSize: 13, fontFamily: "Poppins_700Bold", color: "#B45309" },
 
-  statsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 20 },
+  statsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, padding: 16, paddingBottom: 4 },
   statCard: {
-    width: "47%", backgroundColor: "#fff", borderRadius: 16, padding: 16,
-    alignItems: "center", elevation: 2, borderWidth: 1, borderColor: "#D4EDD4",
+    width: "47.5%", borderRadius: 18, padding: 16,
+    elevation: 4, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4,
   },
-  statIconBox: { width: 44, height: 44, borderRadius: 12, justifyContent: "center", alignItems: "center", marginBottom: 8 },
-  statValue: { fontSize: 26, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
-  statLabel: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginTop: 2, textAlign: "center" },
-  statSubLabel: { fontSize: 10, fontFamily: "Inter_400Regular", color: "#999", marginTop: 1, textAlign: "center" },
+  statIconBox: { width: 40, height: 40, borderRadius: 10, backgroundColor: "rgba(168,217,108,0.15)", justifyContent: "center", alignItems: "center", marginBottom: 12 },
+  statValue: { fontSize: 30, fontFamily: "Poppins_700Bold", color: "#fff", marginBottom: 4 },
+  statLabel: { fontSize: 12, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.75)", marginTop: 2 },
+  statSubLabel: { fontSize: 10, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.55)", marginTop: 1 },
 
-  sectionTitle: { fontSize: 16, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 12 },
+  sectionRow: {
+    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+    paddingHorizontal: 16, marginTop: 20, marginBottom: 12,
+  },
+  sectionTitle: { fontSize: 16, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+  sectionLink: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#3E7B27" },
 
-  actionsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 20 },
+  actionsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, paddingHorizontal: 16, marginBottom: 4 },
   actionCard: {
-    width: "47%", backgroundColor: "#fff", borderRadius: 16, padding: 16,
-    alignItems: "center", elevation: 2, borderWidth: 1, borderColor: "#D4EDD4",
+    width: "30%", backgroundColor: "#fff", borderRadius: 14, padding: 12,
+    alignItems: "center", gap: 8, elevation: 2, borderWidth: 1, borderColor: "#E8F5E8",
   },
   actionIconBox: {
-    width: 52, height: 52, borderRadius: 14,
-    backgroundColor: "#E8F5E8", justifyContent: "center", alignItems: "center", marginBottom: 8,
+    width: 44, height: 44, borderRadius: 12,
+    backgroundColor: "#E8F5E8", justifyContent: "center", alignItems: "center",
   },
-  actionLabel: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+  actionLabel: { fontSize: 10, fontFamily: "Poppins_700Bold", color: "#0B3D2E", textAlign: "center" },
 
   card: {
     backgroundColor: "#fff", borderRadius: 16, padding: 14,
-    marginBottom: 12, elevation: 2, borderWidth: 1, borderColor: "#D4EDD4",
+    marginHorizontal: 16, marginBottom: 10, elevation: 2, borderWidth: 1, borderColor: "#D4EDD4",
   },
   cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 },
   cardHeaderLeft: { flex: 1 },
@@ -483,7 +514,7 @@ const s = StyleSheet.create({
 
   divider: { height: 1, backgroundColor: "#E8F5E8", marginBottom: 10 },
 
-  detailRow: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginBottom: 4 },
+  detailRow: { flexDirection: "row", flexWrap: "wrap", marginBottom: 4 },
   detailItem: { flexDirection: "row", alignItems: "center", gap: 4 },
   detailText: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#555" },
 
@@ -506,7 +537,7 @@ const s = StyleSheet.create({
   checkBadge: { flexDirection: "row", alignItems: "center", gap: 4 },
   checkTxt: { fontSize: 11, fontFamily: "Poppins_700Bold", color: "#3E7B27" },
 
-  emptyBox: { alignItems: "center", paddingVertical: 30, gap: 8, marginBottom: 16 },
+  emptyBox: { alignItems: "center", paddingVertical: 30, gap: 8, marginBottom: 8 },
   emptyText: { fontSize: 14, fontFamily: "Inter_400Regular", color: "#999" },
 
   // Calendar Modal
@@ -531,7 +562,7 @@ const s = StyleSheet.create({
   addVisitBtn: {
     flexDirection: "row", alignItems: "center", gap: 14,
     backgroundColor: "#0B3D2E", borderRadius: 16, padding: 16,
-    marginBottom: 20, elevation: 3,
+    marginHorizontal: 16, marginBottom: 4, elevation: 3,
   },
   addVisitIcon: {
     width: 48, height: 48, borderRadius: 14,

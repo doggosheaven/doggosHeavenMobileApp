@@ -1,17 +1,18 @@
 import { useState, useCallback } from "react";
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  Alert, ActivityIndicator, TextInput, Modal,
+  Alert, ActivityIndicator, TextInput, Modal, StatusBar,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
+import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import Header from "../../components/Header";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
 
 const STATUS_FILTERS = ["all", "pending", "active", "inactive", "rejected"];
 
 export default function AdminBoardingSubscriptions() {
+  const router = useRouter();
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("pending");
@@ -19,6 +20,7 @@ export default function AdminBoardingSubscriptions() {
   const [actionModal, setActionModal] = useState(null); // { booking, action }
   const [adminNote, setAdminNote] = useState("");
   const [processing, setProcessing] = useState(false);
+  const [showFilterModal, setShowFilterModal] = useState(false);
 
   const load = useCallback(async (status = filter) => {
     const { token: t } = await getAuth();
@@ -72,22 +74,52 @@ export default function AdminBoardingSubscriptions() {
 
   return (
     <View style={styles.container}>
-      <Header title="Boarding Subscriptions" />
+      <StatusBar barStyle="light-content" backgroundColor="#0B3D2E" />
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.8}>
+          <Ionicons name="close" size={22} color="#fff" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Boarding Subscriptions</Text>
+        <TouchableOpacity onPress={() => setShowFilterModal(true)} style={styles.filterIconBtn} activeOpacity={0.8}>
+          <Ionicons name="options-outline" size={22} color="#A8D96C" />
+          {filter !== "all" && <View style={styles.filterDot} />}
+        </TouchableOpacity>
+      </View>
 
-      {/* Filter Tabs */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterBar} contentContainerStyle={styles.filterBarContent}>
-        {STATUS_FILTERS.map((s) => (
-          <TouchableOpacity
-            key={s}
-            style={[styles.filterTab, filter === s && styles.filterTabActive]}
-            onPress={() => { setFilter(s); setLoading(true); }}
-          >
-            <Text style={[styles.filterTabText, filter === s && styles.filterTabTextActive]}>
-              {s.charAt(0).toUpperCase() + s.slice(1)}
-            </Text>
+      {/* Active filter badge */}
+      {filter !== "all" && (
+        <View style={styles.activeBadgeRow}>
+          <View style={styles.activeBadge}>
+            <Text style={styles.activeBadgeTxt}>{filter.charAt(0).toUpperCase() + filter.slice(1)}</Text>
+            <TouchableOpacity onPress={() => { setFilter("all"); setLoading(true); }} hitSlop={{top:6,bottom:6,left:6,right:6}}>
+              <Ionicons name="close-circle" size={15} color="#0B3D2E" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Filter Bottom Sheet Modal */}
+      <Modal visible={showFilterModal} transparent animationType="slide" onRequestClose={() => setShowFilterModal(false)}>
+        <TouchableOpacity style={styles.filterOverlay} activeOpacity={1} onPress={() => setShowFilterModal(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.filterSheet}>
+            <View style={styles.filterHandle} />
+            <Text style={styles.filterSheetTitle}>Filter by Status</Text>
+            {STATUS_FILTERS.map((s) => (
+              <TouchableOpacity
+                key={s}
+                style={[styles.filterOption, filter === s && styles.filterOptionActive]}
+                onPress={() => { setFilter(s); setLoading(true); setShowFilterModal(false); }}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.filterOptionTxt, filter === s && styles.filterOptionTxtActive]}>
+                  {s.charAt(0).toUpperCase() + s.slice(1)}
+                </Text>
+                {filter === s && <Ionicons name="checkmark-circle" size={20} color="#0B3D2E" />}
+              </TouchableOpacity>
+            ))}
           </TouchableOpacity>
-        ))}
-      </ScrollView>
+        </TouchableOpacity>
+      </Modal>
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator size="large" color="#0B3D2E" /></View>
@@ -240,15 +272,29 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F0F7F0" },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
 
-  filterBar: { backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: "#D4EDD4", maxHeight: 52 },
-  filterBarContent: { paddingHorizontal: 12, paddingVertical: 10, gap: 8 },
-  filterTab: {
-    paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20,
-    borderWidth: 1, borderColor: "#D4EDD4", backgroundColor: "#F0F7F0",
+  header: {
+    backgroundColor: "#0B3D2E", paddingHorizontal: 16,
+    paddingTop: 52, paddingBottom: 14,
+    flexDirection: "row", alignItems: "center",
   },
-  filterTabActive: { backgroundColor: "#0B3D2E", borderColor: "#0B3D2E" },
-  filterTabText: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
-  filterTabTextActive: { color: "#A8D96C" },
+  backBtn: { width: 36, height: 36, justifyContent: "center" },
+  headerTitle: { flex: 1, fontSize: 18, fontFamily: "Poppins_700Bold", color: "#fff", textAlign: "center" },
+
+  filterIconBtn: { width: 36, height: 36, justifyContent: "center", alignItems: "center" },
+  filterDot: { position: "absolute", top: 4, right: 4, width: 8, height: 8, borderRadius: 4, backgroundColor: "#A8D96C", borderWidth: 1.5, borderColor: "#0B3D2E" },
+
+  activeBadgeRow: { backgroundColor: "#fff", paddingHorizontal: 16, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#D4EDD4", flexDirection: "row" },
+  activeBadge: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#E8F5E8", borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 1, borderColor: "#A8D96C" },
+  activeBadgeTxt: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+
+  filterOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" },
+  filterSheet: { backgroundColor: "#fff", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 36 },
+  filterHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: "#D4EDD4", alignSelf: "center", marginBottom: 16 },
+  filterSheetTitle: { fontSize: 16, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 14 },
+  filterOption: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 14, paddingHorizontal: 12, borderRadius: 12, marginBottom: 6, backgroundColor: "#F0F7F0" },
+  filterOptionActive: { backgroundColor: "#E8F5E8", borderWidth: 1, borderColor: "#A8D96C" },
+  filterOptionTxt: { fontSize: 14, fontFamily: "Inter_400Regular", color: "#0B3D2E" },
+  filterOptionTxtActive: { fontFamily: "Poppins_700Bold" },
 
   scroll: { padding: 16, paddingBottom: 40 },
   emptyBox: { alignItems: "center", paddingVertical: 60 },

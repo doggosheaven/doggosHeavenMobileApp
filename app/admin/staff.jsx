@@ -2,28 +2,30 @@ import { useState, useCallback } from "react";
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
   ActivityIndicator, RefreshControl, Alert, Modal,
-  TextInput, KeyboardAvoidingView, Platform,
+  TextInput, KeyboardAvoidingView, Platform, Image,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
 
 const emptyForm = () => ({ fullName: "", email: "", password: "" });
 
 export default function AdminStaff() {
+  const router = useRouter();
   const [staffList, setStaffList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [token, setToken] = useState("");
 
-  const [formModal, setFormModal] = useState(false);
+  // single modal with mode: null | "detail" | "edit" | "add"
+  const [modalMode, setModalMode] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm());
   const [saving, setSaving] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  const [detailModal, setDetailModal] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detail, setDetail] = useState(null);
   const [historyTab, setHistoryTab] = useState("visits");
@@ -45,7 +47,7 @@ export default function AdminStaff() {
 
   const openDetail = async (s) => {
     setDetail({ staff: s, stats: null, recentVisits: [] });
-    setDetailModal(true);
+    setModalMode("detail");
     setDetailLoading(true);
     try {
       const { token: t } = await getAuth();
@@ -63,6 +65,8 @@ export default function AdminStaff() {
           appointments: data.appointments || [],
           inventoryItems: data.inventoryItems || [],
           recentPets: data.recentPets || [],
+          boardings: data.boardings || [],
+          prescriptions: data.prescriptions || [],
         });
         setHistoryTab("visits");
       }
@@ -71,15 +75,14 @@ export default function AdminStaff() {
   };
 
   const openAdd = () => {
-    setForm(emptyForm()); setEditingId(null); setShowPassword(false); setFormModal(true);
+    setForm(emptyForm()); setEditingId(null); setShowPassword(false); setModalMode("add");
   };
 
   const openEdit = (s) => {
     setForm({ fullName: s.fullName, email: s.email, password: "" });
     setEditingId(s._id);
     setShowPassword(false);
-    setDetailModal(false);
-    setFormModal(true);
+    setModalMode("edit");
   };
 
   const handleSave = async () => {
@@ -101,7 +104,7 @@ export default function AdminStaff() {
           });
       const data = await res.json();
       if (data.success) {
-        setFormModal(false);
+        setModalMode(null);
         loadStaff();
         Alert.alert("Success ✅", editingId ? "Staff updated!" : `"${form.fullName}" added!`);
       } else Alert.alert("Error", data.message);
@@ -121,7 +124,7 @@ export default function AdminStaff() {
             const data = await res.json();
             if (data.success) {
               setStaffList(prev => prev.filter(s => s._id !== id));
-              setDetailModal(false);
+              setModalMode(null);
             } else Alert.alert("Error", data.message);
           } catch { Alert.alert("Error", "Network error"); }
         },
@@ -139,6 +142,9 @@ export default function AdminStaff() {
     <View style={s.container}>
       {/* Header */}
       <View style={s.header}>
+        <TouchableOpacity onPress={() => router.back()} style={s.backBtn} activeOpacity={0.8}>
+          <Ionicons name="close" size={22} color="#fff" />
+        </TouchableOpacity>
         <Text style={s.headerTitle}>Staff</Text>
         <TouchableOpacity style={s.addBtn} onPress={openAdd} activeOpacity={0.8}>
           <Ionicons name="add" size={20} color="#0B3D2E" />
@@ -175,9 +181,13 @@ export default function AdminStaff() {
             staffList.map((item) => (
               <TouchableOpacity key={item._id} style={s.card} onPress={() => openDetail(item)} activeOpacity={0.82}>
                 <View style={s.cardLeft}>
-                  <View style={s.avatar}>
-                    <Text style={s.avatarTxt}>{getInitials(item.fullName)}</Text>
-                  </View>
+                  {item.profilePhoto ? (
+                    <Image source={{ uri: item.profilePhoto }} style={s.avatarImg} />
+                  ) : (
+                    <View style={s.avatar}>
+                      <Text style={s.avatarTxt}>{getInitials(item.fullName)}</Text>
+                    </View>
+                  )}
                   <View style={{ flex: 1 }}>
                     <Text style={s.staffName}>{item.fullName}</Text>
                     <Text style={s.staffEmail}>{item.email}</Text>
@@ -191,15 +201,21 @@ export default function AdminStaff() {
         </ScrollView>
       )}
 
-      {/* ─── Staff Detail Modal ─── */}
-      <Modal visible={detailModal} transparent animationType="slide" onRequestClose={() => setDetailModal(false)}>
+      {/* ─── Single Modal (detail / edit / add) ─── */}
+      <Modal
+        visible={modalMode !== null}
+        transparent
+        animationType="slide"
+        statusBarTranslucent
+        onRequestClose={() => setModalMode(modalMode === "edit" ? "detail" : null)}
+      >
+        {/* ── Detail View ── */}
+        {(modalMode === "detail") && (
         <View style={s.overlay}>
           <View style={[s.sheet, { maxHeight: "93%" }]}>
-
-            {/* Modal Header */}
             <View style={s.sheetHeader}>
               <Text style={s.sheetTitle}>Staff Profile</Text>
-              <TouchableOpacity onPress={() => setDetailModal(false)}>
+              <TouchableOpacity onPress={() => setModalMode(null)}>
                 <Ionicons name="close" size={22} color="#0B3D2E" />
               </TouchableOpacity>
             </View>
@@ -211,9 +227,13 @@ export default function AdminStaff() {
 
                 {/* Avatar + Name + Actions */}
                 <View style={s.profileRow}>
-                  <View style={s.bigAvatar}>
-                    <Text style={s.bigAvatarTxt}>{getInitials(detail.staff?.fullName)}</Text>
-                  </View>
+                  {detail.staff?.profilePhoto ? (
+                    <Image source={{ uri: detail.staff.profilePhoto }} style={s.bigAvatarImg} />
+                  ) : (
+                    <View style={s.bigAvatar}>
+                      <Text style={s.bigAvatarTxt}>{getInitials(detail.staff?.fullName)}</Text>
+                    </View>
+                  )}
                   <View style={{ flex: 1 }}>
                     <Text style={s.profileName}>{detail.staff?.fullName}</Text>
                     <View style={s.badge}><Text style={s.badgeTxt}>Staff Member</Text></View>
@@ -239,9 +259,13 @@ export default function AdminStaff() {
 
                 {/* Stats */}
                 <Text style={s.secTitle}>Activity Stats</Text>
-                <View style={s.statsRow}>
-                  <StatBox icon="paw-outline" label="Total Visits" value={detail.stats?.totalVisits ?? 0} />
-                  <StatBox icon="home-outline" label="Boardings" value={detail.stats?.totalBoardings ?? 0} />
+                <View style={s.statsGrid}>
+                  <StatBox icon="paw-outline"     label="Total Visits"   value={detail.stats?.totalVisits ?? 0}           color="#0B3D2E" />
+                  <StatBox icon="home-outline"    label="Boardings"      value={detail.stats?.totalBoardings ?? 0}        color="#1A5C3A" />
+                  <StatBox icon="cash-outline"    label="Revenue"        value={`₹${detail.stats?.totalRevenue ?? 0}`}   color="#2D6A4F" />
+                  <StatBox icon="heart-outline"   label="Pets Added"     value={detail.stats?.totalPets ?? 0}             color="#3E7B27" />
+                  <StatBox icon="calendar-outline" label="Bookings"      value={detail.stats?.totalAppointments ?? 0}     color="#1A5C3A" />
+                  <StatBox icon="medical-outline" label="Prescriptions"  value={detail.stats?.totalPrescriptions ?? 0}    color="#0B3D2E" />
                 </View>
 
                 {/* Services Section */}
@@ -270,10 +294,12 @@ export default function AdminStaff() {
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.tabsScroll}>
                     <View style={s.tabsRow}>
                       {[
-                        { key: "visits", label: "Visits", icon: "paw", count: detail.recentVisits?.length },
-                        { key: "appointments", label: "Bookings", icon: "calendar", count: detail.appointments?.length },
-                        { key: "inventory", label: "Inventory", icon: "cube", count: detail.inventoryItems?.length },
-                        { key: "pets", label: "Pet Master", icon: "heart", count: detail.recentPets?.length },
+                        { key: "visits",       label: "Visits",       icon: "paw",      count: detail.recentVisits?.length },
+                        { key: "boardings",    label: "Boarding",     icon: "home",     count: detail.boardings?.length },
+                        { key: "appointments", label: "Bookings",     icon: "calendar", count: detail.appointments?.length },
+                        { key: "pets",         label: "Pet Master",   icon: "heart",    count: detail.recentPets?.length },
+                        { key: "inventory",    label: "Inventory",    icon: "cube",     count: detail.inventoryItems?.length },
+                        { key: "prescriptions",label: "Prescriptions",icon: "medical",  count: detail.prescriptions?.length },
                       ].map(tab => (
                         <TouchableOpacity
                           key={tab.key}
@@ -292,6 +318,62 @@ export default function AdminStaff() {
                       ))}
                     </View>
                   </ScrollView>
+
+                  {/* Boardings Tab */}
+                  {historyTab === "boardings" && (
+                    detail.boardings?.length === 0 ? (
+                      <View style={s.noData}>
+                        <Ionicons name="home-outline" size={32} color="#A8D96C" />
+                        <Text style={s.noDataTxt}>No boardings recorded</Text>
+                      </View>
+                    ) : (
+                      detail.boardings.map((b, i) => (
+                        <View key={b._id || i} style={[s.historyItem, i === detail.boardings.length - 1 && { borderBottomWidth: 0 }]}>
+                          <View style={[s.historyIconBox, { backgroundColor: "#E8F5E8" }]}>
+                            <Ionicons name="home" size={18} color="#0B3D2E" />
+                          </View>
+                          <View style={s.historyContent}>
+                            <View style={s.historyTop}>
+                              <Text style={s.historyLabel}>{b.petId?.name || "Unknown Pet"}</Text>
+                              <Text style={s.historyTime}>{fmtDateTime(b.createdAt)}</Text>
+                            </View>
+                            <Text style={s.historySub}>
+                              {b.boardingType?.purpose || "Boarding"}{b.petId?.owner?.name ? `  •  ${b.petId.owner.name}` : ""}
+                            </Text>
+                            <Text style={s.historySub}>
+                              {b.numberOfDays ? `${b.numberOfDays} day(s)` : ""}{b.isBoarded ? "  •  Currently Boarded" : "  •  Deboarded"}
+                            </Text>
+                          </View>
+                        </View>
+                      ))
+                    )
+                  )}
+
+                  {/* Prescriptions Tab */}
+                  {historyTab === "prescriptions" && (
+                    detail.prescriptions?.length === 0 ? (
+                      <View style={s.noData}>
+                        <Ionicons name="medical-outline" size={32} color="#A8D96C" />
+                        <Text style={s.noDataTxt}>No prescriptions added</Text>
+                      </View>
+                    ) : (
+                      detail.prescriptions.map((p, i) => (
+                        <View key={p._id || i} style={[s.historyItem, i === detail.prescriptions.length - 1 && { borderBottomWidth: 0 }]}>
+                          <View style={[s.historyIconBox, { backgroundColor: "#F0FFF4" }]}>
+                            <Ionicons name="medical" size={18} color="#3E7B27" />
+                          </View>
+                          <View style={s.historyContent}>
+                            <View style={s.historyTop}>
+                              <Text style={s.historyLabel}>{p.petId?.name || "Unknown Pet"}</Text>
+                              <Text style={s.historyTime}>{fmtDateTime(p.createdAt)}</Text>
+                            </View>
+                            <Text style={s.historySub}>{p.diagnosis || "No diagnosis"}</Text>
+                            {p.price != null && <Text style={s.historyAmount}>₹{p.price}</Text>}
+                          </View>
+                        </View>
+                      ))
+                    )
+                  )}
 
                   {/* Visits Tab */}
                   {historyTab === "visits" && (
@@ -330,7 +412,7 @@ export default function AdminStaff() {
                     detail.appointments?.length === 0 ? (
                       <View style={s.noData}>
                         <Ionicons name="calendar-outline" size={32} color="#A8D96C" />
-                        <Text style={s.noDataTxt}>No appointments found</Text>
+                        <Text style={s.noDataTxt}>No bookings accepted yet</Text>
                       </View>
                     ) : (
                       detail.appointments.map((a, i) => {
@@ -427,15 +509,15 @@ export default function AdminStaff() {
             ) : null}
           </View>
         </View>
-      </Modal>
+        )}
 
-      {/* ─── Add / Edit Modal ─── */}
-      <Modal visible={formModal} transparent animationType="slide" onRequestClose={() => setFormModal(false)}>
+        {/* ── Add / Edit Form ── */}
+        {(modalMode === "edit" || modalMode === "add") && (
         <KeyboardAvoidingView style={s.overlay} behavior={Platform.OS === "ios" ? "padding" : "height"}>
           <View style={s.sheet}>
             <View style={s.sheetHeader}>
               <Text style={s.sheetTitle}>{editingId ? "Edit Staff" : "Add Staff Member"}</Text>
-              <TouchableOpacity onPress={() => setFormModal(false)}>
+              <TouchableOpacity onPress={() => setModalMode(editingId ? "detail" : null)}>
                 <Ionicons name="close" size={22} color="#0B3D2E" />
               </TouchableOpacity>
             </View>
@@ -491,6 +573,7 @@ export default function AdminStaff() {
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
+        )}
       </Modal>
     </View>
   );
@@ -506,10 +589,10 @@ function InfoRow({ icon, label, value, last }) {
   );
 }
 
-function StatBox({ icon, label, value }) {
+function StatBox({ icon, label, value, color }) {
   return (
-    <View style={s.statBox}>
-      <Ionicons name={icon} size={24} color="#A8D96C" />
+    <View style={[s.statBox, { backgroundColor: color || "#0B3D2E" }]}>
+      <Ionicons name={icon} size={20} color="#A8D96C" />
       <Text style={s.statVal}>{value}</Text>
       <Text style={s.statLabel}>{label}</Text>
     </View>
@@ -522,9 +605,10 @@ const s = StyleSheet.create({
   header: {
     backgroundColor: "#0B3D2E", paddingHorizontal: 20,
     paddingTop: 52, paddingBottom: 16,
-    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+    flexDirection: "row", alignItems: "center",
   },
-  headerTitle: { fontSize: 20, fontFamily: "Poppins_700Bold", color: "#fff" },
+  backBtn: { width: 36, height: 36, justifyContent: "center" },
+  headerTitle: { flex: 1, fontSize: 20, fontFamily: "Poppins_700Bold", color: "#fff", textAlign: "center" },
   addBtn: {
     flexDirection: "row", alignItems: "center", gap: 4,
     backgroundColor: "#A8D96C", paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
@@ -550,6 +634,9 @@ const s = StyleSheet.create({
     width: 48, height: 48, borderRadius: 24,
     backgroundColor: "#0B3D2E", justifyContent: "center", alignItems: "center",
   },
+  avatarImg: {
+    width: 48, height: 48, borderRadius: 24,
+  },
   avatarTxt: { fontSize: 18, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
   staffName: { fontSize: 15, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 2 },
   staffEmail: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#666", marginBottom: 5 },
@@ -572,6 +659,9 @@ const s = StyleSheet.create({
     width: 68, height: 68, borderRadius: 34,
     backgroundColor: "#0B3D2E", justifyContent: "center", alignItems: "center",
   },
+  bigAvatarImg: {
+    width: 68, height: 68, borderRadius: 34,
+  },
   bigAvatarTxt: { fontSize: 26, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
   profileName: { fontSize: 17, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 5 },
   profileActions: { flexDirection: "row", gap: 8, marginTop: 8 },
@@ -593,13 +683,13 @@ const s = StyleSheet.create({
   infoLabel: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#666", flex: 1 },
   infoVal: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#1A1A1A", flex: 2, textAlign: "right" },
 
-  statsRow: { flexDirection: "row", gap: 12, marginBottom: 16 },
+  statsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 16 },
   statBox: {
-    flex: 1, backgroundColor: "#0B3D2E", borderRadius: 14,
-    padding: 16, alignItems: "center", gap: 6,
+    width: "30.5%", borderRadius: 14,
+    padding: 12, alignItems: "center", gap: 4,
   },
-  statVal: { fontSize: 26, fontFamily: "Poppins_700Bold", color: "#fff" },
-  statLabel: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#A8D96C", textAlign: "center" },
+  statVal: { fontSize: 20, fontFamily: "Poppins_700Bold", color: "#fff" },
+  statLabel: { fontSize: 10, fontFamily: "Inter_400Regular", color: "#A8D96C", textAlign: "center" },
 
   visitCard: {
     backgroundColor: "#fff", borderRadius: 12, padding: 12,

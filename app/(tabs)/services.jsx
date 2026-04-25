@@ -6,8 +6,7 @@ import {
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import Header from "../../components/Header";
-import { getAuth } from "../../utils/authStorage";
-import { BASE_URL } from "../../constants/api";
+import { useApp } from "../../context/AppContext";
 
 const SERVICE_EMOJIS = {
   Grooming: "✂️", Hostel: "🏠", "Day School": "🎓",
@@ -36,35 +35,19 @@ const EXCLUDED = ["Buy Subscription", "Shop", "Inquiry"];
 
 export default function ServicesScreen() {
   const router = useRouter();
-  const [services, setServices] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const { services: ctxServices, loadServices } = useApp();
 
-  const loadServices = async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
-    try {
-      const { token } = await getAuth();
-      const res = await fetch(`${BASE_URL}/api/v1/visit/getallvisittypes`, {
-        headers: { Authorization: token || "" },
-      });
-      const data = await res.json();
-      if (data.success) {
-        const filtered = data.visitTypes.filter((s) => !EXCLUDED.includes(s.purpose));
-        setServices(filtered.length > 0 ? filtered : FALLBACK_SERVICES);
-      } else {
-        setServices(FALLBACK_SERVICES);
-      }
-    } catch (e) {
-      console.log(e);
-      setServices(FALLBACK_SERVICES);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+  const services = ctxServices.length > 0 ? ctxServices : FALLBACK_SERVICES;
+  const loading = false;
 
   useEffect(() => { loadServices(); }, []);
-  const onRefresh = () => loadServices(true);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadServices(true);
+    setRefreshing(false);
+  };
 
   // Group services by category
   const sections = useMemo(() => {

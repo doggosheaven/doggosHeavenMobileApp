@@ -1,111 +1,75 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState } from "react";
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl, Image,
+  View, Text, ScrollView, StyleSheet, TouchableOpacity,
+  RefreshControl, Image,
 } from "react-native";
-import { useRouter, useLocalSearchParams } from "expo-router";
-import { useFocusEffect } from "@react-navigation/native";
+import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import Header from "../../components/Header";
-import { getAuth } from "../../utils/authStorage";
-import { BASE_URL } from "../../constants/api";
+import { useApp } from "../../context/AppContext";
 
 const SERVICE_ICONS = {
   Grooming: "✂️", Hostel: "🏠", "Day School": "🎓",
   "Day Care": "🌞", "Play School": "🎮", Veterinary: "🩺", "Dog Park": "🌳",
-  Boarding: "🏠", "Day Boarding": "🌞", "Boarding Wallet (15 days)": "💳",
-  "Day School (26 days)": "🎓", "Play School (26 days)": "🎮",
-  "Grooming (small breed)": "✂️", "Grooming (large breed)": "✂️",
-  "Full Grooming (small breed)": "🛁", "Full Grooming (large breed)": "🛁",
-  "Oil Massage": "💆",
 };
 
-const HEALTH_SERVICES = [
-  { id: "h1", name: "24×7 Medical Services", emoji: "🏥", desc: "Round-the-clock medical care for your pet",  color: "#0B3D2E", bg: "#D4EDD4", border: "#A8D96C" },
-  { id: "h2", name: "Vaccination",           emoji: "💉", desc: "Complete vaccination schedule & records",    color: "#1A5C3A", bg: "#E8F5E8", border: "#D4EDD4" },
-  { id: "h3", name: "Deworming",             emoji: "🔬", desc: "Regular deworming for a healthy pet",        color: "#3E7B27", bg: "#F0F7F0", border: "#D4EDD4" },
-  { id: "h4", name: "Castration",            emoji: "⚕️", desc: "Safe & professional castration procedure",   color: "#0B3D2E", bg: "#E8F5E8", border: "#A8D96C" },
-  { id: "h5", name: "Surgical Treatment",    emoji: "🩺", desc: "Expert surgical care when needed",           color: "#1A5C3A", bg: "#D4EDD4", border: "#D4EDD4" },
-  { id: "h6", name: "Grooming",              emoji: "✂️", desc: "Bath, trim, nail clipping & ear cleaning",   color: "#3E7B27", bg: "#E8F5E8", border: "#D4EDD4" },
-  { id: "h7", name: "Emergency Services",    emoji: "🚨", desc: "Immediate care for urgent situations",        color: "#0B3D2E", bg: "#D4EDD4", border: "#A8D96C" },
-];
-
 const FALLBACK_SERVICES = [
-  { _id: "1", purpose: "Grooming", price: 900, halfdayprice: null, isSubscriptionAvailable: true, detail: "Bath, trim, nail clipping & ear cleaning" },
-  { _id: "2", purpose: "Hostel", price: 1000, halfdayprice: 500, isSubscriptionAvailable: true, detail: "Overnight stay with meals & care" },
-  { _id: "3", purpose: "Day School", price: 350, halfdayprice: null, isSubscriptionAvailable: false, detail: "Training & socializing for your pet" },
-  { _id: "4", purpose: "Day Care", price: 600, halfdayprice: null, isSubscriptionAvailable: false, detail: "Full day supervised care & play" },
-  { _id: "5", purpose: "Play School", price: 500, halfdayprice: null, isSubscriptionAvailable: true, detail: "Fun activities & early training" },
-  { _id: "6", purpose: "Veterinary", price: null, halfdayprice: null, consultationPricePvt: 400, isSubscriptionAvailable: false, detail: "Expert vet consultation & checkup" },
-  { _id: "7", purpose: "Dog Park", price: 667, halfdayprice: null, isSubscriptionAvailable: false, detail: "Open play area for your dog" },
+  { _id: "1", purpose: "Grooming",    price: 900,  halfdayprice: null, isSubscriptionAvailable: true,  detail: "Bath, trim, nail clipping & ear cleaning" },
+  { _id: "2", purpose: "Hostel",      price: 1000, halfdayprice: 500,  isSubscriptionAvailable: true,  detail: "Overnight stay with meals & care" },
+  { _id: "3", purpose: "Day School",  price: 350,  halfdayprice: null, isSubscriptionAvailable: false, detail: "Training & socializing for your pet" },
+  { _id: "4", purpose: "Day Care",    price: 600,  halfdayprice: null, isSubscriptionAvailable: false, detail: "Full day supervised care & play" },
+  { _id: "5", purpose: "Play School", price: 500,  halfdayprice: null, isSubscriptionAvailable: true,  detail: "Fun activities & early training" },
+  { _id: "6", purpose: "Veterinary",  price: null, halfdayprice: null, consultationPricePvt: 400, isSubscriptionAvailable: false, detail: "Expert vet consultation & checkup" },
+  { _id: "7", purpose: "Dog Park",    price: 667,  halfdayprice: null, isSubscriptionAvailable: false, detail: "Open play area for your dog" },
 ];
 
-const EXCLUDED = ["Buy Subscription", "Shop", "Inquiry"];
+const QUICK_ACTIONS = [
+  { icon: "calendar",  label: "My Bookings", sub: "Appointments", bg: "#0B3D2E", route: "/(tabs)/bookings",                  valueKey: "bookings" },
+  { icon: "paw",       label: "My Pets",     sub: "Registered",  bg: "#1A5C3A", route: "/screens/mypets",                        valueKey: "pets" },
+  { icon: "wallet",    label: "My Wallet",   sub: "Balance",     bg: "#3E7B27", route: "/screens/walletscreen",             valueKey: "wallet" },
+  { icon: "home",      label: "Boarding",    sub: "15-day plan", bg: "#1B4D3E", route: "/screens/boardingsubscription",     valueKey: "boarding" },
+];
+
+const SERVICE_CHIPS = [
+  { icon: "cut-outline",               label: "Grooming",    color: "#0B3D2E" },
+  { icon: "moon-outline",              label: "Hostel",      color: "#1A5C3A" },
+  { icon: "school-outline",            label: "Day School",  color: "#3E7B27" },
+  { icon: "sunny-outline",             label: "Day Care",    color: "#0B3D2E" },
+  { icon: "game-controller-outline",   label: "Play School", color: "#1A5C3A" },
+  { icon: "medkit-outline",            label: "Veterinary",  color: "#3E7B27" },
+  { icon: "leaf-outline",              label: "Dog Park",    color: "#0B3D2E" },
+];
 
 export default function HomeScreen() {
   const router = useRouter();
-  const scrollRef = useRef(null);
-  const servicesY = useRef(0);
-  const [user, setUser] = useState(null);
-  const [services, setServices] = useState(FALLBACK_SERVICES);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeBoarding, setActiveBoarding] = useState(null);
-  const [boardingHistory, setBoardingHistory] = useState([]);
+  const { user, services: ctxServices, boarding: ctxBoarding, bookings: ctxBookings, pets: ctxPets, wallet: ctxWallet, loadAuth, loadServices, loadBoarding, loadAppointments, loadPets, loadWallet } = useApp();
 
-  const loadData = async () => {
-    try {
-      const { user: savedUser, token } = await getAuth();
-      setUser(savedUser);
-      const [svcRes, boardRes] = await Promise.all([
-        fetch(`${BASE_URL}/api/v1/visit/getallvisittypes`, { headers: { Authorization: token || "" } }),
-        fetch(`${BASE_URL}/api/v1/boarding-subscription/dashboard`, { headers: { Authorization: token || "" } }),
-      ]);
-      const svcData = await svcRes.json();
-      const boardData = await boardRes.json();
-      if (svcData.success) {
-        const filtered = svcData.visitTypes.filter((s) => !EXCLUDED.includes(s.purpose));
-        setServices(filtered.length > 0 ? filtered : FALLBACK_SERVICES);
-      }
-      if (boardData.success) {
-        setActiveBoarding(boardData.dashboard?.activeBoarding || null);
-        setBoardingHistory(boardData.dashboard?.bookings || []);
-      }
-    } catch (e) {
-      console.log(e);
-    } finally {
-      setRefreshing(false);
-    }
+  const services = ctxServices.length > 0 ? ctxServices : FALLBACK_SERVICES;
+  const activeBoarding = ctxBoarding?.activeBoarding || null;
+
+  useEffect(() => {
+    loadAuth(true).then(() => {
+      Promise.all([loadServices(), loadBoarding(), loadAppointments(), loadPets(), loadWallet()]);
+    });
+  }, []);
+
+  const quickValues = {
+    bookings: ctxBookings?.length ?? "0",
+    pets:     ctxPets?.length     ?? "0",
+    wallet:   ctxWallet?.balance != null ? `₹${ctxWallet.balance}` : "₹0",
+    boarding: activeBoarding?.daysRemaining ? `${activeBoarding.daysRemaining}d` : "0",
   };
 
-  useEffect(() => { loadData(); }, []);
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([loadServices(true), loadBoarding(true), loadAppointments(true), loadPets(true), loadWallet(true)]);
+    setRefreshing(false);
+  };
 
-  useFocusEffect(
-    useCallback(() => {
-      getAuth().then(({ user: u }) => setUser(u));
-    }, [])
-  );
-  const onRefresh = () => { setRefreshing(true); loadData(); };
-
-  const handleViewAll = () => router.push("/(tabs)/services");
-
-  const handleBookService = (service) => {
+  const bookService = (service) => {
     router.push({
       pathname: "/screens/bookingform",
-      params: {
-        serviceId: service._id,
-        serviceName: service.purpose,
-        serviceEmoji: service.emoji || "🐾",
-        servicePrice: service.price || 0,
-        serviceHalfPrice: service.halfdayprice || 0,
-        serviceConsultPrice: service.consultationPricePvt || 0,
-        serviceDescription: service.description || "",
-        servicePriceTiers: service.priceTiers?.length ? encodeURIComponent(JSON.stringify(service.priceTiers)) : "",
-      }
-    });
-  };
-
-  const handleViewServiceDetail = (service) => {
-    router.push({
-      pathname: "/screens/servicedetail",
       params: {
         serviceId: service._id,
         serviceName: service.purpose,
@@ -113,199 +77,186 @@ export default function HomeScreen() {
         servicePrice: service.price || 0,
         serviceHalfPrice: service.halfdayprice || 0,
         serviceConsultPrice: service.consultationPricePvt || 0,
-        serviceDescription: service.description || "",
+        serviceDescription: service.description || service.detail || "",
         servicePriceTiers: service.priceTiers?.length ? encodeURIComponent(JSON.stringify(service.priceTiers)) : "",
-        serviceSubscriptionPrice: service.subscriptionPrice || 0,
-        serviceCustomFields: service.customFields?.length ? encodeURIComponent(JSON.stringify(service.customFields)) : "",
-        isSubscriptionAvailable: service.isSubscriptionAvailable ? "true" : "false",
       },
     });
   };
 
-  const handleHealthService = (svc) => {
-    const match = services.find(
-      (s) => s.purpose.toLowerCase().includes(svc.name.toLowerCase()) ||
-             svc.name.toLowerCase().includes(s.purpose.toLowerCase())
-    );
-    router.push({
-      pathname: "/screens/bookingform",
-      params: {
-        serviceId: match?._id || "",
-        serviceName: svc.name,
-        serviceEmoji: svc.emoji,
-        servicePrice: match?.price || "",
-        serviceHalfPrice: match?.halfdayprice || "",
-        serviceConsultPrice: match?.consultationPricePvt || "",
-        serviceDescription: svc.desc,
-        servicePriceTiers: match?.priceTiers?.length
-          ? encodeURIComponent(JSON.stringify(match.priceTiers))
-          : "",
-      },
-    });
+  const handleChipPress = (label) => {
+    const match = services.find((s) => s.purpose.toLowerCase().includes(label.toLowerCase()));
+    if (match) bookService(match);
+    else router.push("/(tabs)/services");
   };
 
-  const featuredServices = services.slice(0, 3);
+  const today = new Date();
+  const hour = today.getHours();
+  const greeting = hour < 12 ? "Good Morning" : hour < 17 ? "Good Afternoon" : "Good Evening";
 
   return (
-    <View style={styles.container}>
+    <View style={s.container}>
       <Header />
       <ScrollView
-        ref={scrollRef}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={s.scroll}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0B3D2E" />}
       >
-        {/* Welcome Card */}
-        <View style={styles.welcomeCard}>
-          <View style={styles.welcomeLeft}>
-            <Text style={styles.welcomeGreeting}>Welcome back 👋</Text>
-            <Text style={styles.userName}>{user?.fullName || "Pet Parent"}</Text>
-            <Text style={styles.welcomeSub}>Ready to care for your furry friend?</Text>
+
+        {/* ── Hero Welcome ── */}
+        <View style={s.hero}>
+          <View style={s.heroLeft}>
+            <Text style={s.heroGreeting}>{greeting} 👋</Text>
+            <Text style={s.heroName}>{user?.fullName || "Pet Parent"}</Text>
+            <View style={s.heroBadge}>
+              <Ionicons name="paw" size={11} color="#A8D96C" />
+              <Text style={s.heroBadgeTxt}>Doggos Heaven Member</Text>
+            </View>
           </View>
-          <TouchableOpacity
-            style={styles.pawCircle}
-            onPress={() => router.push("/(tabs)/profile")}
-            activeOpacity={0.8}
-          >
-            {user?.profileImage ? (
-              <Image source={{ uri: user.profileImage }} style={styles.pawProfileImg} />
+          <TouchableOpacity onPress={() => router.push("/(tabs)/profile")} activeOpacity={0.85}>
+            {user?.profilePhoto || user?.profileImage ? (
+              <Image source={{ uri: user.profilePhoto || user.profileImage }} style={s.heroAvatar} />
             ) : (
-              <Ionicons name="paw" size={32} color="#A8D96C" />
+              <View style={s.heroAvatarPlaceholder}>
+                <Text style={s.heroAvatarInitial}>
+                  {user?.fullName?.charAt(0)?.toUpperCase() || "P"}
+                </Text>
+              </View>
             )}
           </TouchableOpacity>
         </View>
 
-        {/* Quick Actions */}
-        <View style={styles.quickRow}>
-          <TouchableOpacity style={styles.quickCard} onPress={() => router.push("/(tabs)/bookings")} activeOpacity={0.8}>
-            <View style={styles.quickIconBox}>
-              <Text style={styles.quickIcon}>📅</Text>
-            </View>
-            <Text style={styles.quickLabel}>My{"\n"}Bookings</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.quickCard} onPress={() => router.push("/(tabs)/Pet/PetForm")} activeOpacity={0.8}>
-            <View style={styles.quickIconBox}>
-              <Text style={styles.quickIcon}>➕</Text>
-            </View>
-            <Text style={styles.quickLabel}>Add{"\n"}Pet</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.quickCard} onPress={() => router.push("/screens/walletscreen")} activeOpacity={0.8}>
-            <View style={styles.quickIconBox}>
-              <Text style={styles.quickIcon}>💳</Text>
-            </View>
-            <Text style={styles.quickLabel}>My{"\n"}Wallet</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.quickCard} onPress={() => router.push("/screens/boardingsubscription")} activeOpacity={0.8}>
-            <View style={styles.quickIconBox}>
-              <Text style={styles.quickIcon}>🏠</Text>
-            </View>
-            <Text style={styles.quickLabel}>Boarding{"\n"}Plan</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Boarding Status Card */}
-        <TouchableOpacity style={activeBoarding ? styles.boardingActiveCard : styles.boardingBanner} onPress={() => router.push("/screens/boardingsubscription")} activeOpacity={0.88}>
-          {activeBoarding ? (
-            <>
-              <View style={styles.boardingBannerLeft}>
-                <View style={styles.boardingBadge}>
-                  <Text style={styles.boardingBadgeText}>● BOARDING ACTIVE</Text>
-                </View>
-                <Text style={styles.boardingTitle}>{activeBoarding.numberOfPets} Pet{activeBoarding.numberOfPets > 1 ? "s" : ""} Boarded</Text>
-                <Text style={styles.boardingPrice}>₹{activeBoarding.dailyCharge}/day <Text style={styles.boardingPriceSmall}>· {activeBoarding.daysRemaining} days left</Text></Text>
-                <View style={styles.boardingSubscribeBtn}>
-                  <Text style={styles.boardingSubscribeBtnText}>View Details →</Text>
-                </View>
-              </View>
-              <Text style={styles.boardingEmoji}>🏡</Text>
-            </>
-          ) : boardingHistory.length > 0 ? (
-            <>
-              <View style={styles.boardingBannerLeft}>
-                <View style={styles.boardingBadge}>
-                  <Text style={styles.boardingBadgeText}>🐾 BOARDING HISTORY</Text>
-                </View>
-                <Text style={styles.boardingTitle}>Last Boarding</Text>
-                <Text style={styles.boardingPrice}>
-                  {boardingHistory[0]?.status?.toUpperCase()}
-                  <Text style={styles.boardingPriceSmall}> · {boardingHistory[0]?.numberOfPets} pet{boardingHistory[0]?.numberOfPets > 1 ? "s" : ""}</Text>
-                </Text>
-                <View style={styles.boardingSubscribeBtn}>
-                  <Text style={styles.boardingSubscribeBtnText}>Board Again →</Text>
-                </View>
-              </View>
-              <Text style={styles.boardingEmoji}>🏡</Text>
-            </>
-          ) : (
-            <>
-              <View style={styles.boardingBannerLeft}>
-                <View style={styles.boardingBadge}>
-                  <Text style={styles.boardingBadgeText}>🐾 SUBSCRIPTION PLAN</Text>
-                </View>
-                <Text style={styles.boardingTitle}>15-Day Boarding Plan</Text>
-                <Text style={styles.boardingPrice}>₹11,500 <Text style={styles.boardingPriceSmall}>· ₹766/day per pet</Text></Text>
-                <View style={styles.boardingSubscribeBtn}>
-                  <Text style={styles.boardingSubscribeBtnText}>Subscribe Now →</Text>
-                </View>
-              </View>
-              <Text style={styles.boardingEmoji}>🏡</Text>
-            </>
-          )}
-        </TouchableOpacity>
-
-        {/* Promo Banner */}
-        <View style={styles.banner}>
-          <View style={styles.bannerLeft}>
-            <View style={styles.bannerBadge}>
-              <Text style={styles.bannerBadgeText}>🔥 LIMITED TIME</Text>
-            </View>
-            <Text style={styles.bannerDiscount}>15% OFF</Text>
-            <Text style={styles.bannerSub}>On all grooming services</Text>
-            <TouchableOpacity style={styles.bannerBtn} onPress={handleViewAll}>
-              <Text style={styles.bannerBtnText}>Book Now →</Text>
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.bannerEmoji}>🐕</Text>
-        </View>
-
-        {/* Health & Medical Services */}
-        <View style={styles.sectionRow}>
-          <Text style={styles.sectionTitle}>Health & Medical</Text>
-        </View>
-        <View style={styles.healthGrid}>
-          {HEALTH_SERVICES.map((svc) => (
+        {/* ── Quick Actions ── */}
+        <View style={s.quickGrid}>
+          {QUICK_ACTIONS.map((item) => (
             <TouchableOpacity
-              key={svc.id}
-              style={[styles.healthCard, { borderColor: svc.border }]}
-              onPress={() => handleHealthService(svc)}
-              activeOpacity={0.82}
+              key={item.label}
+              style={[s.quickCard, { backgroundColor: item.bg }]}
+              onPress={() => router.push(item.route)}
+              activeOpacity={0.85}
             >
-              <View style={styles.healthCardTop}>
-                <View style={[styles.healthIconBox, { backgroundColor: svc.bg }]}>
-                  <Text style={styles.healthEmoji}>{svc.emoji}</Text>
-                </View>
-                <Text style={styles.healthName} numberOfLines={2}>{svc.name}</Text>
-                <Text style={styles.healthDesc} numberOfLines={2}>{svc.desc}</Text>
+              <View style={s.quickIconBox}>
+                <Ionicons name={item.icon} size={22} color="#A8D96C" />
               </View>
-              <View style={[styles.healthBookBtn, { backgroundColor: svc.color }]}>
-                <Text style={styles.healthBookTxt}>Book Now</Text>
-                <Ionicons name="arrow-forward" size={12} color="#A8D96C" />
-              </View>
+              <Text style={s.quickValue}>{quickValues[item.valueKey]}</Text>
+              <Text style={s.quickLabel}>{item.label}</Text>
+              <Text style={s.quickSub}>{item.sub}</Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* Doctor Section */}
-        <View style={styles.sectionRow}>
-          <Text style={styles.sectionTitle}>Our Veterinarian</Text>
-        </View>
+        {/* ── Boarding Status Banner ── */}
         <TouchableOpacity
-          style={styles.doctorCard}
+          style={[s.boardingCard, activeBoarding && s.boardingCardActive]}
+          onPress={() => router.push("/screens/boardingsubscription")}
+          activeOpacity={0.88}
+        >
+          <View style={s.boardingInfo}>
+            <View style={s.boardingTopRow}>
+              <View style={[s.boardingStatusDot, { backgroundColor: activeBoarding ? "#A8D96C" : "#888" }]} />
+              <Text style={s.boardingStatusTxt}>
+                {activeBoarding ? "BOARDING ACTIVE" : "15-DAY BOARDING PLAN"}
+              </Text>
+            </View>
+            {activeBoarding ? (
+              <>
+                <Text style={s.boardingBigTxt}>{activeBoarding.numberOfPets} Pet{activeBoarding.numberOfPets > 1 ? "s" : ""} Boarded</Text>
+                <Text style={s.boardingSmallTxt}>₹{activeBoarding.dailyCharge}/day · {activeBoarding.daysRemaining} days remaining</Text>
+              </>
+            ) : (
+              <>
+                <Text style={s.boardingBigTxt}>₹11,500</Text>
+                <Text style={s.boardingSmallTxt}>₹766/day per pet · Subscribe now</Text>
+              </>
+            )}
+            <View style={s.boardingCta}>
+              <Text style={s.boardingCtaTxt}>{activeBoarding ? "View Details" : "Subscribe Now"}</Text>
+              <Ionicons name="arrow-forward" size={12} color="#0B3D2E" />
+            </View>
+          </View>
+          <Text style={s.boardingEmoji}>🏡</Text>
+        </TouchableOpacity>
+
+        {/* ── Services ── */}
+        <View style={s.sectionRow}>
+          <Text style={s.sectionTitle}>Our Services</Text>
+          <TouchableOpacity onPress={() => router.push("/(tabs)/services")}>
+            <Text style={s.sectionLink}>See all →</Text>
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={s.chipsScroll}
+        >
+          {SERVICE_CHIPS.map((chip) => (
+            <TouchableOpacity
+              key={chip.label}
+              style={s.chip}
+              onPress={() => handleChipPress(chip.label)}
+              activeOpacity={0.82}
+            >
+              <View style={[s.chipIcon, { backgroundColor: chip.color }]}>
+                <Ionicons name={chip.icon} size={20} color="#A8D96C" />
+              </View>
+              <Text style={s.chipLabel}>{chip.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        {/* ── Featured Services ── */}
+        <View style={s.sectionRow}>
+          <Text style={s.sectionTitle}>Popular Services</Text>
+          <TouchableOpacity onPress={() => router.push("/(tabs)/services")}>
+            <Text style={s.sectionLink}>View all →</Text>
+          </TouchableOpacity>
+        </View>
+
+        {services.slice(0, 4).map((service) => {
+          const price = service.price || service.consultationPricePvt;
+          return (
+            <TouchableOpacity
+              key={service._id}
+              style={s.serviceRow}
+              onPress={() => bookService(service)}
+              activeOpacity={0.85}
+            >
+              <View style={s.serviceRowIcon}>
+                <Text style={{ fontSize: 22 }}>{service.emoji || SERVICE_ICONS[service.purpose] || "🐾"}</Text>
+              </View>
+              <View style={s.serviceRowInfo}>
+                <Text style={s.serviceRowName}>{service.purpose}</Text>
+                <Text style={s.serviceRowDesc} numberOfLines={1}>{service.description || service.detail}</Text>
+              </View>
+              <View style={s.serviceRowRight}>
+                {price ? (
+                  <Text style={s.serviceRowPrice}>₹{price}</Text>
+                ) : (
+                  <Text style={s.serviceRowPriceNA}>On Request</Text>
+                )}
+                <TouchableOpacity
+                  style={s.bookBtn}
+                  onPress={() => bookService(service)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={s.bookBtnTxt}>Book</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+
+        {/* ── Vet Card ── */}
+        <View style={s.sectionRow}>
+          <Text style={s.sectionTitle}>Our Veterinarian</Text>
+        </View>
+
+        <TouchableOpacity
+          style={s.vetCard}
           activeOpacity={0.88}
           onPress={() => {
-            const vetService = services.find((s) =>
-              s.purpose.toLowerCase().includes("vet") ||
-              s.purpose.toLowerCase().includes("consult")
+            const vetService = services.find((sv) =>
+              sv.purpose.toLowerCase().includes("vet") || sv.purpose.toLowerCase().includes("consult")
             );
             router.push({
               pathname: "/screens/bookingform",
@@ -322,385 +273,261 @@ export default function HomeScreen() {
             });
           }}
         >
-          {/* Dark header banner */}
-          <View style={styles.doctorBanner}>
-            <View style={styles.doctorBannerLeft}>
-              <View style={styles.doctorAvatarLarge}>
-                <Text style={{ fontSize: 34 }}>👨⚕️</Text>
+          {/* Header */}
+          <View style={s.vetHeader}>
+            <View style={s.vetAvatarBox}>
+              <Text style={{ fontSize: 34 }}>👨‍⚕️</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={s.vetNameRow}>
+                <Text style={s.vetName}>Dr. Bhuvnesh Ahlawat</Text>
+                <View style={s.vetBadge}>
+                  <Ionicons name="checkmark-circle" size={11} color="#A8D96C" />
+                  <Text style={s.vetBadgeTxt}>Verified</Text>
+                </View>
               </View>
-              <View style={{ flex: 1 }}>
-                <View style={styles.doctorVerifiedRow}>
-                  <Text style={styles.doctorNameWhite}>Dr. Bhuvnesh Ahlawat</Text>
-                  <View style={styles.verifiedBadge}>
-                    <Ionicons name="checkmark-circle" size={12} color="#A8D96C" />
-                    <Text style={styles.verifiedText}>Verified</Text>
-                  </View>
-                </View>
-                <Text style={styles.doctorDegWhite}>B.V.Sc & A.H. — Veterinarian</Text>
-                <View style={styles.doctorRatingRow}>
-                  {[1,2,3,4,5].map((s) => (
-                    <Ionicons key={s} name="star" size={12} color="#A8D96C" />
-                  ))}
-                  <Text style={styles.doctorRatingText}>5.0 • Expert Vet</Text>
-                </View>
+              <Text style={s.vetDeg}>B.V.Sc & A.H. — Veterinarian</Text>
+              <View style={s.vetStars}>
+                {[1,2,3,4,5].map((i) => <Ionicons key={i} name="star" size={12} color="#F59E0B" />)}
+                <Text style={s.vetStarsTxt}>5.0 · Expert Vet</Text>
               </View>
             </View>
           </View>
 
-          {/* Fee + timing row */}
-          <View style={styles.doctorMetaRow}>
-            <View style={styles.doctorMetaItem}>
-              <Ionicons name="pricetag-outline" size={15} color="#0B3D2E" />
-              <View>
-                <Text style={styles.doctorMetaLabel}>Consultation</Text>
-                <Text style={styles.doctorMetaValue}>₹500</Text>
-              </View>
-            </View>
-            <View style={styles.doctorMetaSep} />
-            <View style={styles.doctorMetaItem}>
-              <Ionicons name="time-outline" size={15} color="#0B3D2E" />
-              <View>
-                <Text style={styles.doctorMetaLabel}>Working Hours</Text>
-                <Text style={styles.doctorMetaValue}>10 AM – 9 PM</Text>
-              </View>
-            </View>
-            <View style={styles.doctorMetaSep} />
-            <View style={styles.doctorMetaItem}>
-              <Ionicons name="location-outline" size={15} color="#0B3D2E" />
-              <View>
-                <Text style={styles.doctorMetaLabel}>Location</Text>
-                <Text style={styles.doctorMetaValue}>Jhajjar</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Skills */}
-          <View style={styles.doctorSkillsRow}>
-            {["Surgery","Vaccination","Dermatology","OPD","Diagnosis"].map((s) => (
-              <View key={s} style={styles.doctorSkillChip}>
-                <Text style={styles.doctorSkillText}>{s}</Text>
+          {/* Specialization chips */}
+          <View style={s.vetSpecRow}>
+            {["Dogs & Cats", "Surgery", "Vaccination", "Dental Care"].map((sp) => (
+              <View key={sp} style={s.vetSpecChip}>
+                <Text style={s.vetSpecTxt}>{sp}</Text>
               </View>
             ))}
           </View>
 
-          {/* Book button */}
-          <View style={styles.doctorBookBtn}>
-            <Ionicons name="calendar-outline" size={16} color="#0B3D2E" />
-            <Text style={styles.doctorBookBtnText}>Book Consultation</Text>
-            <Ionicons name="arrow-forward" size={15} color="#0B3D2E" />
+          {/* Info chips */}
+          <View style={s.vetInfoRow}>
+            <View style={s.vetInfoChip}>
+              <Ionicons name="pricetag-outline" size={13} color="#3E7B27" />
+              <Text style={s.vetInfoTxt}>₹500 Consult</Text>
+            </View>
+            <View style={s.vetInfoChip}>
+              <Ionicons name="time-outline" size={13} color="#3E7B27" />
+              <Text style={s.vetInfoTxt}>10 AM – 9 PM</Text>
+            </View>
+            <View style={s.vetInfoChip}>
+              <Ionicons name="location-outline" size={13} color="#3E7B27" />
+              <Text style={s.vetInfoTxt}>Jhajjar</Text>
+            </View>
+          </View>
+
+          {/* Book */}
+          <View style={s.vetBookBtn}>
+            <Ionicons name="calendar-outline" size={15} color="#0B3D2E" />
+            <Text style={s.vetBookBtnTxt}>Book Consultation</Text>
+            <Ionicons name="arrow-forward" size={14} color="#0B3D2E" style={{ marginLeft: "auto" }} />
           </View>
         </TouchableOpacity>
 
-        {/* Services Section */}
-        <View
-          style={styles.sectionRow}
-          onLayout={(e) => { servicesY.current = e.nativeEvent.layout.y; }}
+        {/* ── Explore All ── */}
+        <TouchableOpacity
+          style={s.exploreBtn}
+          onPress={() => router.push("/(tabs)/services")}
+          activeOpacity={0.85}
         >
-          <Text style={styles.sectionTitle}>Our Services</Text>
-          <TouchableOpacity onPress={handleViewAll}>
-            <Text style={styles.viewAllBtn}>View All →</Text>
-          </TouchableOpacity>
-        </View>
+          <Ionicons name="grid-outline" size={18} color="#0B3D2E" />
+          <Text style={s.exploreBtnTxt}>Explore All {services.length} Services</Text>
+          <Ionicons name="arrow-forward" size={16} color="#0B3D2E" style={{ marginLeft: "auto" }} />
+        </TouchableOpacity>
 
-        <View style={styles.servicesGrid}>
-          {featuredServices.map((service) => (
-            <TouchableOpacity key={service._id} style={styles.serviceCard} onPress={() => handleViewServiceDetail(service)} activeOpacity={0.88}>
-              {/* Top Row */}
-              <View style={styles.cardTop}>
-                <View style={styles.serviceIconBox}>
-                  <Text style={styles.serviceIcon}>{service.emoji || SERVICE_ICONS[service.purpose] || "🐾"}</Text>
-                </View>
-                <View style={styles.serviceInfo}>
-                  <Text style={styles.serviceName}>{service.purpose}</Text>
-                  <Text style={styles.serviceDetail}>{service.description || service.detail || "Professional pet care"}</Text>
-                  {service.isSubscriptionAvailable && (
-                    <View style={styles.subBadge}>
-                      <Ionicons name="checkmark-circle" size={12} color="#3E7B27" />
-                      <Text style={styles.subBadgeText}>Subscription Available</Text>
-                    </View>
-                  )}
-                </View>
-                <Ionicons name="chevron-forward" size={16} color="#A8D96C" />
-              </View>
-
-              <View style={styles.divider} />
-
-              {/* Price + Button Row */}
-              <View style={styles.bottomRow}>
-                <View style={styles.priceSection}>
-                  {service.priceTiers?.length > 0 ? service.priceTiers.map((t, i) => (
-                    <View key={i} style={styles.priceChip}>
-                      <Text style={styles.priceLabel}>{t.label}</Text>
-                      <Text style={styles.priceValue}>₹{t.price}</Text>
-                    </View>
-                  )) : service.price ? (
-                    <View style={styles.priceChip}>
-                      <Text style={styles.priceLabel}>Price</Text>
-                      <Text style={styles.priceValue}>₹{service.price}</Text>
-                    </View>
-                  ) : service.consultationPricePvt ? (
-                    <View style={styles.priceChip}>
-                      <Text style={styles.priceLabel}>Consult</Text>
-                      <Text style={styles.priceValue}>₹{service.consultationPricePvt}</Text>
-                    </View>
-                  ) : (
-                    <Text style={styles.servicePriceNA}>Price on request</Text>
-                  )}
-                </View>
-                <TouchableOpacity
-                  style={styles.reserveBtn}
-                  onPress={(e) => { e.stopPropagation?.(); handleBookService(service); }}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.reserveBtnText}>Reserve</Text>
-                  <Ionicons name="arrow-forward" size={14} color="#fff" />
-                </TouchableOpacity>
-              </View>
-
-              {service.subscriptionPrice ? (
-                <View style={styles.subscriptionRow}>
-                  <View style={styles.subscriptionLeft}>
-                    <Ionicons name="checkmark-circle" size={14} color="#3E7B27" />
-                    <Text style={styles.subscriptionLabel}>Hostel Subscription available</Text>
-                  </View>
-                  <Text style={styles.subscriptionPrice}>₹{service.subscriptionPrice}/day</Text>
-                </View>
-              ) : null}
-            </TouchableOpacity>
-          ))}
-
-          <TouchableOpacity style={styles.viewAllCard} onPress={handleViewAll} activeOpacity={0.8}>
-            <Text style={styles.viewAllCardText}>View All Services</Text>
-            <Text style={styles.viewAllCardCount}>{services.length} services available</Text>
-          </TouchableOpacity>
-        </View>
       </ScrollView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F0F7F0" },
-  scroll: { padding: 16, paddingBottom: 40 },
+  scroll: { paddingBottom: 48 },
 
-  welcomeCard: {
-    backgroundColor: "#0B3D2E", borderRadius: 20, padding: 20,
+  // ── Hero ──
+  hero: {
+    backgroundColor: "#0B3D2E",
+    paddingHorizontal: 20, paddingTop: 20, paddingBottom: 28,
     flexDirection: "row", justifyContent: "space-between", alignItems: "center",
-    marginBottom: 16, elevation: 3,
   },
-  welcomeLeft: { flex: 1 },
-  welcomeGreeting: { fontSize: 12, color: "#A8D96C", fontFamily: "Inter_400Regular", marginBottom: 4 },
-  userName: { fontSize: 22, color: "#fff", fontFamily: "Poppins_700Bold", marginBottom: 4 },
-  welcomeSub: { fontSize: 12, color: "#aaa", fontFamily: "Inter_400Regular" },
-  pawCircle: {
-    width: 60, height: 60, borderRadius: 30,
-    backgroundColor: "#1A5C3A",
-    justifyContent: "center", alignItems: "center",
-    overflow: "hidden",
+  heroLeft: { flex: 1 },
+  heroGreeting: { fontSize: 13, color: "#A8D96C", fontFamily: "Inter_400Regular", marginBottom: 4 },
+  heroName: { fontSize: 24, color: "#fff", fontFamily: "Poppins_700Bold", marginBottom: 8 },
+  heroBadge: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    backgroundColor: "rgba(168,217,108,0.15)",
+    alignSelf: "flex-start", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20,
   },
-  pawProfileImg: {
-    width: 60, height: 60, borderRadius: 30,
-  },
-  pawEmoji: { fontSize: 30, color: "#A8D96C" },
+  heroBadgeTxt: { fontSize: 11, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
+  heroAvatar: {
+  width: 100,
+  height: 100,
+  borderRadius: 35,
 
-  quickRow: { flexDirection: "row", gap: 8, marginBottom: 16 },
+  backgroundColor: "#ffffff",
+
+  borderWidth: 2,
+  borderColor: "#A8D96C",
+
+  shadowColor: "#A8D96C",
+  shadowOffset: { width: 0, height: 8 },
+  shadowOpacity: 0.25,
+  shadowRadius: 10,
+
+  elevation: 10,
+
+  justifyContent: "center",
+  alignItems: "center",
+},
+  heroAvatarPlaceholder: {
+    width: 58, height: 58, borderRadius: 29,
+    backgroundColor: "#1A5C3A", borderWidth: 2.5, borderColor: "#A8D96C",
+    justifyContent: "center", alignItems: "center",
+  },
+  heroAvatarInitial: { fontSize: 24, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
+
+  // ── Quick Actions ──
+  quickGrid: {
+    flexDirection: "row", flexWrap: "wrap", gap: 10,
+    paddingHorizontal: 16, paddingTop: 16, paddingBottom: 4,
+  },
   quickCard: {
-    flex: 1, backgroundColor: "#fff", borderRadius: 14, padding: 10,
-    alignItems: "center", elevation: 2,
-    borderWidth: 1.5, borderColor: "#A8D96C",
+    width: "47.5%", borderRadius: 18, padding: 16, elevation: 4,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12, shadowRadius: 5,
   },
   quickIconBox: {
-    width: 40, height: 40, borderRadius: 12,
-    backgroundColor: "#0B3D2E",
-    justifyContent: "center", alignItems: "center", marginBottom: 6,
+    width: 42, height: 42, borderRadius: 12,
+    backgroundColor: "rgba(168,217,108,0.15)",
+    justifyContent: "center", alignItems: "center", marginBottom: 12,
   },
-  quickIcon: { fontSize: 18 },
-  quickLabel: { fontSize: 10, fontFamily: "Poppins_700Bold", color: "#0B3D2E", textAlign: "center", lineHeight: 14 },
+  quickValue: { fontSize: 30, fontFamily: "Poppins_700Bold", color: "#fff", marginBottom: 4 },
+  quickLabel: { fontSize: 12, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.75)", marginBottom: 1 },
+  quickSub: { fontSize: 10, fontFamily: "Inter_400Regular", color: "rgba(168,217,108,0.6)" },
 
-  // Boarding Plan Banner
-  boardingActiveCard: {
-    backgroundColor: "#1A5C3A", borderRadius: 20, padding: 20,
-    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
-    marginBottom: 16, elevation: 4,
-    borderWidth: 1.5, borderColor: "#A8D96C",
+  // ── Boarding ──
+  boardingCard: {
+    backgroundColor: "#0B3D2E", borderRadius: 18, marginHorizontal: 16, marginTop: 14,
+    padding: 18, flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+    elevation: 3, borderWidth: 1, borderColor: "rgba(168,217,108,0.2)",
   },
-  boardingBanner: {
-    backgroundColor: "#0B3D2E", borderRadius: 20, padding: 20,
-    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
-    marginBottom: 16, elevation: 4,
-    borderWidth: 1.5, borderColor: "#A8D96C",
-  },
-  boardingBannerLeft: { flex: 1 },
-  boardingBadge: {
-    backgroundColor: "rgba(168,217,108,0.2)", alignSelf: "flex-start",
-    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, marginBottom: 8,
-  },
-  boardingBadgeText: { fontSize: 10, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
-  boardingTitle: { fontSize: 20, fontFamily: "Poppins_700Bold", color: "#fff", marginBottom: 4 },
-  boardingPrice: { fontSize: 16, fontFamily: "Poppins_700Bold", color: "#A8D96C", marginBottom: 14 },
-  boardingPriceSmall: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#aaa" },
-  boardingSubscribeBtn: {
-    backgroundColor: "#A8D96C", alignSelf: "flex-start",
-    paddingHorizontal: 18, paddingVertical: 9, borderRadius: 20,
-  },
-  boardingSubscribeBtnText: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
-  boardingEmoji: { fontSize: 60, marginLeft: 8 },
-
-  banner: {
-    backgroundColor: "#1A5C3A", borderRadius: 20, padding: 20,
-    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
-    marginBottom: 20, elevation: 3,
-  },
-  bannerLeft: { flex: 1 },
-  bannerBadge: {
-    backgroundColor: "rgba(168,217,108,0.2)", alignSelf: "flex-start",
-    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, marginBottom: 8,
-  },
-  bannerBadgeText: { fontSize: 10, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
-  bannerDiscount: { fontSize: 32, fontFamily: "Poppins_700Bold", color: "#fff", lineHeight: 36 },
-  bannerSub: { fontSize: 12, color: "#aaa", fontFamily: "Inter_400Regular", marginBottom: 12 },
-  bannerBtn: {
-    backgroundColor: "#A8D96C", alignSelf: "flex-start",
-    paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20,
-  },
-  bannerBtnText: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
-  bannerEmoji: { fontSize: 56, marginLeft: 8 },
-
-  sectionRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
-  sectionTitle: { fontSize: 17, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
-  viewAllBtn: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#3E7B27" },
-
-  servicesGrid: { gap: 10 },
-  serviceCard: {
-    backgroundColor: "#fff", borderRadius: 16, padding: 16,
-    elevation: 2, borderWidth: 1.5, borderColor: "#D4EDD4",
-  },
-  cardTop: { flexDirection: "row", alignItems: "flex-start", marginBottom: 12 },
-  serviceIconBox: {
-    width: 52, height: 52, borderRadius: 14,
-    backgroundColor: "#0B3D2E",
-    justifyContent: "center", alignItems: "center", marginRight: 14,
-  },
-  serviceIcon: { fontSize: 26 },
-  serviceInfo: { flex: 1 },
-  serviceName: { fontSize: 15, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 2 },
-  serviceDetail: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#666", marginBottom: 6 },
-  subBadge: {
-    flexDirection: "row", alignItems: "center", gap: 4,
-    backgroundColor: "#E8F5E8", alignSelf: "flex-start",
-    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10,
-  },
-  subBadgeText: { fontSize: 10, fontFamily: "Poppins_700Bold", color: "#3E7B27" },
-  divider: { height: 1, backgroundColor: "#E8F5E8", marginBottom: 12 },
-  bottomRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  priceSection: { flexDirection: "row", gap: 8, flexWrap: "wrap", flex: 1 },
-  priceChip: {
-    backgroundColor: "#E8F5E8", borderRadius: 10,
-    paddingHorizontal: 10, paddingVertical: 6, alignItems: "center",
-    borderWidth: 1, borderColor: "#D4EDD4",
-  },
-  priceLabel: { fontSize: 9, fontFamily: "Inter_400Regular", color: "#3E7B27" },
-  priceValue: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
-  servicePriceNA: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#999" },
-  reserveBtn: {
+  boardingCardActive: { borderColor: "#A8D96C", borderWidth: 1.5 },
+  boardingInfo: { flex: 1 },
+  boardingTopRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 },
+  boardingStatusDot: { width: 7, height: 7, borderRadius: 4 },
+  boardingStatusTxt: { fontSize: 10, fontFamily: "Poppins_700Bold", color: "#A8D96C", letterSpacing: 0.6 },
+  boardingBigTxt: { fontSize: 22, fontFamily: "Poppins_700Bold", color: "#fff", marginBottom: 3 },
+  boardingSmallTxt: { fontSize: 12, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.55)", marginBottom: 14 },
+  boardingCta: {
     flexDirection: "row", alignItems: "center", gap: 6,
-    backgroundColor: "#3E7B27", paddingHorizontal: 16, paddingVertical: 10,
-    borderRadius: 20,
+    backgroundColor: "#A8D96C", alignSelf: "flex-start",
+    paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
   },
-  reserveBtnText: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#fff" },
-  subscriptionRow: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    backgroundColor: "#E8F5E8", borderRadius: 10, padding: 10, marginTop: 10,
-  },
-  subscriptionLeft: { flexDirection: "row", alignItems: "center", gap: 6 },
-  subscriptionLabel: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#3E7B27" },
-  subscriptionPrice: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+  boardingCtaTxt: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+  boardingEmoji: { fontSize: 50, marginLeft: 10 },
 
-  viewAllCard: {
-    backgroundColor: "#0B3D2E", borderRadius: 16, padding: 18,
-    alignItems: "center", elevation: 2,
+  // ── Section Header ──
+  sectionRow: {
+    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+    paddingHorizontal: 16, marginTop: 22, marginBottom: 12,
   },
-  viewAllCardText: { fontSize: 15, fontFamily: "Poppins_700Bold", color: "#fff", marginBottom: 4 },
-  viewAllCardCount: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#A8D96C" },
+  sectionTitle: { fontSize: 16, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+  sectionLink: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#3E7B27" },
 
-  // Health & Medical
-  healthGrid: {
-    flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 20,
+  // ── Service Chips ──
+  chipsScroll: { paddingHorizontal: 16, gap: 10, paddingBottom: 4 },
+  chip: { alignItems: "center", gap: 8, width: 76 },
+  chipIcon: {
+    width: 56, height: 56, borderRadius: 16,
+    justifyContent: "center", alignItems: "center",
+    elevation: 2,
   },
-  healthCard: {
-    width: "47%", backgroundColor: "#fff", borderRadius: 16,
-    elevation: 2, borderWidth: 1.5,
-    overflow: "hidden",
-    justifyContent: "space-between",
-    minHeight: 180,
-  },
-  healthCardTop: {
-    flex: 1, padding: 14, paddingBottom: 10,
-  },
-  healthIconBox: {
-    width: 48, height: 48, borderRadius: 14,
-    justifyContent: "center", alignItems: "center", marginBottom: 10,
-  },
-  healthEmoji: { fontSize: 24 },
-  healthName: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 4, lineHeight: 18 },
-  healthDesc: { fontSize: 10, fontFamily: "Inter_400Regular", color: "#3E7B27", lineHeight: 14 },
-  healthBookBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center",
-    gap: 6, paddingVertical: 11,
-  },
-  healthBookTxt: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
+  chipLabel: { fontSize: 11, fontFamily: "Poppins_700Bold", color: "#0B3D2E", textAlign: "center" },
 
-  // Doctor Card
-  doctorCard: {
-    backgroundColor: "#fff", borderRadius: 20,
-    marginBottom: 20, elevation: 4,
-    borderWidth: 1.5, borderColor: "#A8D96C",
-    overflow: "hidden",
+  // ── Service Rows ──
+  serviceRow: {
+    backgroundColor: "#fff", marginHorizontal: 16, marginBottom: 8,
+    borderRadius: 14, padding: 14,
+    flexDirection: "row", alignItems: "center", gap: 12,
+    elevation: 1, borderWidth: 1, borderColor: "#E8F5E8",
   },
-  doctorBanner: {
-    backgroundColor: "#0B3D2E", padding: 18,
+  serviceRowIcon: {
+    width: 46, height: 46, borderRadius: 12,
+    backgroundColor: "#E8F5E8", justifyContent: "center", alignItems: "center",
   },
-  doctorBannerLeft: { flexDirection: "row", alignItems: "center", gap: 14 },
-  doctorAvatarLarge: {
-    width: 68, height: 68, borderRadius: 34,
+  serviceRowInfo: { flex: 1 },
+  serviceRowName: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 3 },
+  serviceRowDesc: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#888" },
+  serviceRowRight: { alignItems: "flex-end", gap: 6 },
+  serviceRowPrice: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+  serviceRowPriceNA: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#aaa" },
+  bookBtn: {
+    backgroundColor: "#0B3D2E", borderRadius: 20,
+    paddingHorizontal: 14, paddingVertical: 6,
+  },
+  bookBtnTxt: { fontSize: 11, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
+
+  // ── Vet Card ──
+  vetCard: {
+    backgroundColor: "#fff", borderRadius: 18, marginHorizontal: 16,
+    elevation: 3, borderWidth: 1, borderColor: "#D4EDD4", overflow: "hidden",
+  },
+  vetHeader: {
+    backgroundColor: "#0B3D2E", padding: 16,
+    flexDirection: "row", alignItems: "center", gap: 14,
+  },
+  vetAvatarBox: {
+    width: 64, height: 64, borderRadius: 32,
     backgroundColor: "rgba(168,217,108,0.15)",
     borderWidth: 2, borderColor: "#A8D96C",
     justifyContent: "center", alignItems: "center",
   },
-  doctorVerifiedRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 3 },
-  doctorNameWhite: { fontSize: 16, fontFamily: "Poppins_700Bold", color: "#fff" },
-  verifiedBadge: {
+  vetNameRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 3 },
+  vetName: { fontSize: 15, fontFamily: "Poppins_700Bold", color: "#fff" },
+  vetBadge: {
     flexDirection: "row", alignItems: "center", gap: 3,
     backgroundColor: "rgba(168,217,108,0.2)",
-    paddingHorizontal: 7, paddingVertical: 2, borderRadius: 20,
+    paddingHorizontal: 6, paddingVertical: 2, borderRadius: 20,
   },
-  verifiedText: { fontSize: 10, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
-  doctorDegWhite: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#A8D96C", marginBottom: 6 },
-  doctorRatingRow: { flexDirection: "row", alignItems: "center", gap: 3 },
-  doctorRatingText: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#ccc", marginLeft: 4 },
+  vetBadgeTxt: { fontSize: 9, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
+  vetDeg: { fontSize: 11, fontFamily: "Inter_400Regular", color: "rgba(168,217,108,0.8)", marginBottom: 6 },
+  vetStars: { flexDirection: "row", alignItems: "center", gap: 2 },
+  vetStarsTxt: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#ccc", marginLeft: 4 },
 
-  doctorMetaRow: {
-    flexDirection: "row", alignItems: "center",
-    paddingHorizontal: 16, paddingVertical: 14,
-    borderBottomWidth: 1, borderBottomColor: "#E8F5E8",
-  },
-  doctorMetaItem: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
-  doctorMetaSep: { width: 1, height: 32, backgroundColor: "#E8F5E8" },
-  doctorMetaLabel: { fontSize: 9, fontFamily: "Inter_400Regular", color: "#888" },
-  doctorMetaValue: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
-
-  doctorSkillsRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, paddingHorizontal: 16, paddingVertical: 12 },
-  doctorSkillChip: {
+  vetSpecRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, paddingHorizontal: 14, paddingTop: 12, paddingBottom: 4 },
+  vetSpecChip: {
     backgroundColor: "#E8F5E8", borderRadius: 20,
     paddingHorizontal: 10, paddingVertical: 5,
     borderWidth: 1, borderColor: "#D4EDD4",
   },
-  doctorSkillText: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#0B3D2E" },
+  vetSpecTxt: { fontSize: 11, fontFamily: "Poppins_700Bold", color: "#3E7B27" },
 
-  doctorBookBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
-    backgroundColor: "#A8D96C", margin: 14, marginTop: 4,
-    borderRadius: 14, paddingVertical: 13,
+  vetInfoRow: {
+    flexDirection: "row", gap: 8, padding: 14,
+    borderBottomWidth: 1, borderBottomColor: "#F0F7F0",
   },
-  doctorBookBtnText: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+  vetInfoChip: {
+    flex: 1, flexDirection: "row", alignItems: "center", gap: 5,
+    backgroundColor: "#F0F7F0", borderRadius: 10, padding: 8,
+  },
+  vetInfoTxt: { fontSize: 10, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+
+  vetBookBtn: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: "#A8D96C", margin: 14,
+    borderRadius: 12, paddingVertical: 13, paddingHorizontal: 16,
+  },
+  vetBookBtnTxt: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+
+  // ── Explore All ──
+  exploreBtn: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    backgroundColor: "#fff", marginHorizontal: 16, marginTop: 16,
+    borderRadius: 14, padding: 16,
+    elevation: 1, borderWidth: 1, borderColor: "#D4EDD4",
+  },
+  exploreBtnTxt: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
 });

@@ -1,20 +1,23 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  RefreshControl, Alert, ActivityIndicator, Modal,
+  RefreshControl, Alert, ActivityIndicator, Modal, FlatList,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import Header from "../../components/Header";
-import { getAuth } from "../../utils/authStorage";
+import { useApp } from "../../context/AppContext";
 import { BASE_URL } from "../../constants/api";
-import { initiatePayment, calcGST } from "../../utils/paymentHelper";
+import { initiatePayment } from "../../utils/paymentHelper";
+
+const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const DAY_NAMES = ["Su","Mo","Tu","We","Th","Fr","Sa"];
 
 const STATUS_CONFIG = {
-  pending:   { label: "Pending",   bg: "#FFF9E6", color: "#B8860B", icon: "⏳" },
-  confirmed: { label: "Confirmed", bg: "#E8F5E8", color: "#2E7D32", icon: "✅" },
-  completed: { label: "Completed", bg: "#E8F5E8", color: "#0B3D2E", icon: "🎉" },
-  cancelled: { label: "Cancelled", bg: "#FFEBEE", color: "#C62828", icon: "❌" },
+  pending:   { label: "Pending",   bg: "#FFF9E6", color: "#B8860B", icon: "⏳", barColor: "#F0C040" },
+  confirmed: { label: "Confirmed", bg: "#E8F5E8", color: "#2E7D32", icon: "✅", barColor: "#4CAF50" },
+  completed: { label: "Completed", bg: "#E3F2FD", color: "#1565C0", icon: "🎉", barColor: "#1565C0" },
+  cancelled: { label: "Cancelled", bg: "#FFEBEE", color: "#C62828", icon: "❌", barColor: "#C62828" },
 };
 
 const FILTERS = [
@@ -27,37 +30,27 @@ const FILTERS = [
 
 export default function BookingsScreen() {
   const router = useRouter();
-  const [appointments, setAppointments] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState("All");
-  const [token, setToken] = useState(null);
-  const [user, setUser] = useState(null);
   const [payingId, setPayingId] = useState(null);
   const [showFilterModal, setShowFilterModal] = useState(false);
+  const [showCalModal, setShowCalModal] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [calMonth, setCalMonth] = useState(new Date());
+  const { user, token, appointments, loadAppointments, setAppointments } = useApp();
 
-  const loadAppointments = useCallback(async () => {
-    try {
-      const { user: u, token: t } = await getAuth();
-      setToken(t);
-      setUser(u);
-      const res = await fetch(`${BASE_URL}/api/v1/customerappointment/getcustomerappoint/${u?.id}`, {
-        headers: { Authorization: t || "" },
-      });
-      const data = await res.json();
-      if (data.success) setAppointments(data.data || []);
-    } catch (e) {
-      console.log(e);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
+  const loading = appointments.length === 0 && !refreshing;
 
   useEffect(() => { loadAppointments(); }, []);
-  const onRefresh = () => { setRefreshing(true); loadAppointments(); };
 
-  const handlePayNow = async (appt) => {
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadAppointments(true);
+    setRefreshing(false);
+  };
+
+  const handlePayNow = async (appt, e) => {
+    e?.stopPropagation?.();
     setPayingId(appt._id);
     await initiatePayment({
       appointmentId: appt._id,
@@ -66,13 +59,14 @@ export default function BookingsScreen() {
       serviceName: appt.serviceName,
       user,
       token,
-      onSuccess: loadAppointments,
-      onRefresh: loadAppointments,
+      onSuccess: () => loadAppointments(true),
+      onRefresh: () => loadAppointments(true),
     });
     setPayingId(null);
   };
 
-  const handleCancel = (id) => {
+  const handleCancel = (id, e) => {
+    e?.stopPropagation?.();
     Alert.alert("Cancel Appointment", "Are you sure you want to cancel?", [
       { text: "No", style: "cancel" },
       {
@@ -99,9 +93,19 @@ export default function BookingsScreen() {
     ]);
   };
 
-  const filtered = filter === "All"
+  const isSameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
+
+  const filtered = (filter === "All"
     ? appointments
-    : appointments.filter((a) => a.status === filter.toLowerCase());
+    : appointments.filter((a) => a.status === filter.toLowerCase())
+  ).filter((a) => selectedDate ? isSameDay(a.appointmentDate, selectedDate) : true);
+
+  const calYear = calMonth.getFullYear();
+  const calMonthIdx = calMonth.getMonth();
+  const daysInMonth = new Date(calYear, calMonthIdx + 1, 0).getDate();
+  const firstDay = new Date(calYear, calMonthIdx, 1).getDay();
+  const calDays = [...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
+  const fmtSelectedDate = selectedDate ? selectedDate.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "";
 
   const activeFilter = FILTERS.find((f) => f.key === filter);
 
@@ -120,28 +124,91 @@ export default function BookingsScreen() {
 
   return (
     <View style={styles.container}>
-      <Header title="All Bookings" />
+      <Header title="My Bookings" />
 
-      {/* Filter Button Row */}
-      <View style={styles.filterRow}>
+      {/* Filter Bar */}
+      <View style={styles.filterBar}>
         <TouchableOpacity style={styles.filterBtn} onPress={() => setShowFilterModal(true)} activeOpacity={0.8}>
-          <Ionicons name="filter" size={16} color="#0B3D2E" />
-          <Text style={styles.filterBtnText}>Filter: {activeFilter?.label}</Text>
-          <Ionicons name="chevron-down" size={14} color="#0B3D2E" />
+          <Ionicons name="options-outline" size={16} color="#0B3D2E" />
+          <Text style={styles.filterBtnText}>{activeFilter?.label}</Text>
+          <Ionicons name="chevron-down" size={13} color="#0B3D2E" />
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.filterBtn, selectedDate && styles.filterBtnActive]} onPress={() => setShowCalModal(true)} activeOpacity={0.8}>
+          <Ionicons name="calendar-outline" size={16} color={selectedDate ? "#fff" : "#0B3D2E"} />
+          <Text style={[styles.filterBtnText, selectedDate && { color: "#fff" }]}>
+            {selectedDate ? fmtSelectedDate : "Date"}
+          </Text>
+          {selectedDate && (
+            <TouchableOpacity onPress={() => setSelectedDate(null)} hitSlop={{ top:6,bottom:6,left:6,right:6 }}>
+              <Ionicons name="close-circle" size={14} color="#fff" />
+            </TouchableOpacity>
+          )}
         </TouchableOpacity>
         {filter !== "All" && (
-          <TouchableOpacity style={styles.clearFilterBtn} onPress={() => setFilter("All")}>
-            <Ionicons name="close-circle" size={16} color="#C62828" />
-            <Text style={styles.clearFilterText}>Clear</Text>
+          <TouchableOpacity style={styles.clearBtn} onPress={() => setFilter("All")} activeOpacity={0.8}>
+            <Ionicons name="close-circle" size={15} color="#C62828" />
+            <Text style={styles.clearBtnText}>Clear</Text>
           </TouchableOpacity>
         )}
-        <Text style={styles.filterCount}>{filtered.length} booking{filtered.length !== 1 ? "s" : ""}</Text>
+        <View style={styles.countBadge}>
+          <Text style={styles.countText}>{filtered.length}</Text>
+        </View>
       </View>
 
+      {/* Calendar Modal */}
+      <Modal visible={showCalModal} transparent animationType="fade" onRequestClose={() => setShowCalModal(false)}>
+        <TouchableOpacity style={styles.calOverlay} activeOpacity={1} onPress={() => setShowCalModal(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.calBox}>
+            <View style={styles.calHeader}>
+              <TouchableOpacity onPress={() => setCalMonth(new Date(calYear, calMonthIdx - 1, 1))} hitSlop={{top:8,bottom:8,left:8,right:8}}>
+                <Ionicons name="chevron-back" size={20} color="#0B3D2E" />
+              </TouchableOpacity>
+              <Text style={styles.calMonthTxt}>{MONTH_NAMES[calMonthIdx]} {calYear}</Text>
+              <TouchableOpacity onPress={() => setCalMonth(new Date(calYear, calMonthIdx + 1, 1))} hitSlop={{top:8,bottom:8,left:8,right:8}}>
+                <Ionicons name="chevron-forward" size={20} color="#0B3D2E" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.calDayRow}>
+              {DAY_NAMES.map(d => <Text key={d} style={styles.calDayName}>{d}</Text>)}
+            </View>
+            <FlatList
+              data={calDays}
+              numColumns={7}
+              keyExtractor={(_, i) => String(i)}
+              scrollEnabled={false}
+              renderItem={({ item: day }) => {
+                if (!day) return <View style={styles.calDayEmpty} />;
+                const thisDate = new Date(calYear, calMonthIdx, day);
+                const isSel = selectedDate && isSameDay(thisDate, selectedDate);
+                const isToday = isSameDay(thisDate, new Date());
+                return (
+                  <TouchableOpacity
+                    style={[styles.calDay, isSel && styles.calDaySelected, isToday && !isSel && styles.calDayToday]}
+                    onPress={() => { setSelectedDate(thisDate); setShowCalModal(false); }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.calDayTxt, isSel && styles.calDayTxtSelected, isToday && !isSel && styles.calDayTxtToday]}>{day}</Text>
+                  </TouchableOpacity>
+                );
+              }}
+            />
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 14 }}>
+              <TouchableOpacity style={[styles.calTodayBtn, { flex: 1, backgroundColor: "#F0F7F0" }]} onPress={() => { setSelectedDate(new Date()); setShowCalModal(false); }} activeOpacity={0.8}>
+                <Text style={[styles.calTodayBtnTxt, { color: "#0B3D2E" }]}>Today</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.calTodayBtn, { flex: 1 }]} onPress={() => { setSelectedDate(null); setShowCalModal(false); }} activeOpacity={0.8}>
+                <Text style={styles.calTodayBtnTxt}>Show All</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
       {/* Filter Modal */}
-      <Modal visible={showFilterModal} transparent animationType="fade" onRequestClose={() => setShowFilterModal(false)}>
+      <Modal visible={showFilterModal} transparent animationType="slide" onRequestClose={() => setShowFilterModal(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowFilterModal(false)}>
-          <View style={styles.modalBox}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
             <Text style={styles.modalTitle}>Filter Bookings</Text>
             {FILTERS.map((f) => (
               <TouchableOpacity
@@ -150,9 +217,14 @@ export default function BookingsScreen() {
                 onPress={() => { setFilter(f.key); setShowFilterModal(false); }}
                 activeOpacity={0.8}
               >
-                <Ionicons name={f.icon} size={20} color={filter === f.key ? "#A8D96C" : "#0B3D2E"} />
+                <View style={[styles.modalOptionIcon, filter === f.key && styles.modalOptionIconActive]}>
+                  <Ionicons name={f.icon} size={18} color={filter === f.key ? "#fff" : "#0B3D2E"} />
+                </View>
                 <Text style={[styles.modalOptionText, filter === f.key && styles.modalOptionTextActive]}>{f.label}</Text>
-                {filter === f.key && <Ionicons name="checkmark" size={18} color="#A8D96C" style={{ marginLeft: "auto" }} />}
+                <Text style={styles.modalOptionCount}>
+                  {f.key === "All" ? appointments.length : appointments.filter(a => a.status === f.key.toLowerCase()).length}
+                </Text>
+                {filter === f.key && <Ionicons name="checkmark-circle" size={18} color="#A8D96C" />}
               </TouchableOpacity>
             ))}
           </View>
@@ -164,44 +236,42 @@ export default function BookingsScreen() {
         contentContainerStyle={styles.scroll}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0B3D2E" />}
       >
-        {/* New Booking Button */}
-        <TouchableOpacity
-          style={styles.newBookingBtn}
-          onPress={() => router.navigate("/(tabs)/services")}
-          activeOpacity={0.8}
-        >
-          <View style={styles.newBookingIconBox}>
-            <Text style={styles.newBookingIcon}>➕</Text>
+        {/* New Booking CTA */}
+        <TouchableOpacity style={styles.newBookingBtn} onPress={() => router.navigate("/(tabs)/services")} activeOpacity={0.85}>
+          <View style={styles.newBookingLeft}>
+            <View style={styles.newBookingIconBox}>
+              <Ionicons name="add" size={22} color="#A8D96C" />
+            </View>
+            <View>
+              <Text style={styles.newBookingTitle}>Book a New Service</Text>
+              <Text style={styles.newBookingSub}>Explore all available services</Text>
+            </View>
           </View>
-          <Text style={styles.newBookingText}>Book a New Service</Text>
+          <Ionicons name="chevron-forward" size={18} color="#A8D96C" />
         </TouchableOpacity>
 
-        {/* Stats Row */}
+        {/* Stats */}
         {appointments.length > 0 && (
           <View style={styles.statsRow}>
-            <View style={styles.statCard}>
-              <Text style={styles.statNum}>{appointments.length}</Text>
-              <Text style={styles.statLabel}>Total</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Text style={styles.statNum}>{appointments.filter(a => a.status === "pending").length}</Text>
-              <Text style={styles.statLabel}>Pending</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Text style={styles.statNum}>{appointments.filter(a => a.status === "confirmed").length}</Text>
-              <Text style={styles.statLabel}>Confirmed</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Text style={styles.statNum}>{appointments.filter(a => a.status === "completed").length}</Text>
-              <Text style={styles.statLabel}>Completed</Text>
-            </View>
+            {[
+              { label: "Total", count: appointments.length, color: "#0B3D2E" },
+              { label: "Pending", count: appointments.filter(a => a.status === "pending").length, color: "#B8860B" },
+              { label: "Confirmed", count: appointments.filter(a => a.status === "confirmed").length, color: "#2E7D32" },
+              { label: "Done", count: appointments.filter(a => a.status === "completed").length, color: "#1565C0" },
+            ].map((s) => (
+              <View key={s.label} style={styles.statCard}>
+                <Text style={[styles.statNum, { color: s.color }]}>{s.count}</Text>
+                <Text style={styles.statLabel}>{s.label}</Text>
+              </View>
+            ))}
           </View>
         )}
 
-        {/* Appointments List */}
+        {/* List */}
         {loading ? (
           <View style={styles.emptyBox}>
             <ActivityIndicator size="large" color="#0B3D2E" />
+            <Text style={styles.loadingText}>Loading bookings...</Text>
           </View>
         ) : filtered.length === 0 ? (
           <View style={styles.emptyBox}>
@@ -212,103 +282,108 @@ export default function BookingsScreen() {
         ) : (
           filtered.map((appt) => {
             const status = STATUS_CONFIG[appt.status] || STATUS_CONFIG.pending;
+            const isPaying = payingId === appt._id;
             return (
-              <View key={appt._id} style={styles.card}>
-                {/* Card Header */}
-                <View style={styles.cardHeader}>
-                  <View style={styles.serviceIconBox}>
-                    <Text style={styles.serviceIconText}>🐾</Text>
-                  </View>
-                  <View style={styles.cardHeaderInfo}>
-                    <Text style={styles.serviceName}>{appt.serviceName || "Service"}</Text>
-                    <Text style={styles.petName}>🐶 {appt.petName}</Text>
-                  </View>
-                  <View style={[styles.statusBadge, { backgroundColor: status.bg }]}>
-                    <Text style={styles.statusIcon}>{status.icon}</Text>
-                    <Text style={[styles.statusText, { color: status.color }]}>{status.label}</Text>
-                  </View>
-                </View>
+              <TouchableOpacity
+                key={appt._id}
+                style={styles.card}
+                onPress={() => router.push({ pathname: "/screens/bookingdetail", params: { id: appt._id } })}
+                activeOpacity={0.88}
+              >
+                {/* Left color bar */}
+                <View style={[styles.cardBar, { backgroundColor: status.barColor }]} />
 
-                <View style={styles.divider} />
+                <View style={styles.cardInner}>
+                  {/* Top row */}
+                  <View style={styles.cardTop}>
+                    <View style={styles.cardIconBox}>
+                      <Text style={styles.cardIconText}>🐾</Text>
+                    </View>
+                    <View style={styles.cardTopInfo}>
+                      <Text style={styles.cardServiceName} numberOfLines={1}>{appt.serviceName || "Service"}</Text>
+                      <Text style={styles.cardPetName}>🐶 {appt.petName}</Text>
+                    </View>
+                    <View style={[styles.statusBadge, { backgroundColor: status.bg }]}>
+                      <Text style={styles.statusIcon}>{status.icon}</Text>
+                      <Text style={[styles.statusText, { color: status.color }]}>{status.label}</Text>
+                    </View>
+                  </View>
 
-                {/* Details */}
-                <View style={styles.detailsRow}>
-                  <View style={styles.detailItem}>
-                    <Text style={styles.detailIcon}>📅</Text>
-                    <Text style={styles.detailText}>{formatDate(appt.appointmentDate)}</Text>
-                  </View>
-                  <View style={styles.detailItem}>
-                    <Text style={styles.detailIcon}>🕐</Text>
-                    <Text style={styles.detailText}>{formatTime(appt.appointmentTime)}</Text>
-                  </View>
-                  {appt.totalAmount > 0 && (() => {
-                    const { gst, total } = calcGST(appt.totalAmount, appt.paymentMode || "online");
-                    return (
-                      <View style={styles.detailItem}>
-                        <Text style={styles.detailIcon}>💰</Text>
-                        <Text style={styles.detailText}>₹{total} <Text style={{ color: "#B8860B", fontSize: 10 }}>(+₹{gst} GST)</Text></Text>
+                  {/* Divider */}
+                  <View style={styles.divider} />
+
+                  {/* Info chips */}
+                  <View style={styles.chipsRow}>
+                    <View style={styles.chip}>
+                      <Ionicons name="calendar-outline" size={12} color="#3E7B27" />
+                      <Text style={styles.chipText}>{formatDate(appt.appointmentDate)}</Text>
+                    </View>
+                    <View style={styles.chip}>
+                      <Ionicons name="time-outline" size={12} color="#3E7B27" />
+                      <Text style={styles.chipText}>{formatTime(appt.appointmentTime)}</Text>
+                    </View>
+                    {appt.totalAmount > 0 && (
+                      <View style={styles.chip}>
+                        <Ionicons name="pricetag-outline" size={12} color="#3E7B27" />
+                        <Text style={styles.chipText}>₹{appt.totalAmount}</Text>
                       </View>
-                    );
-                  })()}
-                </View>
-
-                {/* Pet Info */}
-                {(appt.petBreed || appt.petAge) && (
-                  <View style={styles.petInfoBox}>
-                    {appt.petBreed && <Text style={styles.petInfoText}>Breed: {appt.petBreed}</Text>}
-                    {appt.petAge && <Text style={styles.petInfoText}>Age: {appt.petAge}</Text>}
+                    )}
+                    {appt.ambulanceRequired && (
+                      <View style={[styles.chip, styles.chipAccent]}>
+                        <Text style={styles.chipAccentText}>🚗 Pickup & Drop</Text>
+                      </View>
+                    )}
                   </View>
-                )}
 
-                {/* Notes */}
-                {appt.notes ? (
-                  <View style={styles.notesBox}>
-                    <Text style={styles.notesText}>📝 {appt.notes}</Text>
-                  </View>
-                ) : null}
-
-                {/* Pay Now Banner */}
-                {appt.status === "confirmed" && appt.paymentStatus !== "paid" && (() => {
-                  const { gst, total } = calcGST(appt.totalAmount, appt.paymentMode || "online");
-                  return (
+                  {/* Pay Now inline */}
+                  {appt.status === "confirmed" && appt.paymentStatus !== "paid" && (
                     <TouchableOpacity
-                      style={styles.payBanner}
-                      onPress={() => handlePayNow(appt)}
-                      activeOpacity={0.8}
-                      disabled={payingId === appt._id}
+                      style={styles.payInline}
+                      onPress={(e) => handlePayNow(appt, e)}
+                      activeOpacity={0.85}
+                      disabled={isPaying}
                     >
-                      {payingId === appt._id ? (
-                        <ActivityIndicator size="small" color="#0B3D2E" style={{ marginRight: 8 }} />
+                      {isPaying ? (
+                        <ActivityIndicator size="small" color="#0B3D2E" />
                       ) : (
-                        <Ionicons name="card" size={16} color="#0B3D2E" />
+                        <Ionicons name="card" size={14} color="#0B3D2E" />
                       )}
-                      <View style={styles.payBannerInfo}>
-                        <Text style={styles.payBannerTitle}>
-                          {payingId === appt._id ? "Opening Payment..." : "Payment Pending"}
-                        </Text>
-                        <Text style={styles.payBannerSub}>Pay ₹{total} (base ₹{appt.totalAmount} + GST ₹{gst})</Text>
-                      </View>
-                      {payingId !== appt._id && <Text style={styles.payBannerArrow}>Pay →</Text>}
+                      <Text style={styles.payInlineText}>
+                        {isPaying ? "Opening..." : `Pay ₹${appt.totalAmount}`}
+                      </Text>
+                      {!isPaying && <Ionicons name="chevron-forward" size={13} color="#0B3D2E" style={{ marginLeft: "auto" }} />}
                     </TouchableOpacity>
-                  );
-                })()}
+                  )}
 
-                {appt.status === "confirmed" && appt.paymentStatus === "paid" && (
-                  <View style={styles.paidBanner}>
-                    <Ionicons name="checkmark-circle" size={16} color="#2E7D32" />
-                    <Text style={styles.paidBannerText}>Payment Completed ✅</Text>
+                  {appt.status === "confirmed" && appt.paymentStatus === "paid" && (
+                    <View style={styles.paidChip}>
+                      <Ionicons name="checkmark-circle" size={13} color="#2E7D32" />
+                      <Text style={styles.paidChipText}>Payment Done</Text>
+                    </View>
+                  )}
+
+                  {/* Bottom row */}
+                  <View style={styles.cardBottom}>
+                    <Text style={styles.cardId}>#{appt._id.slice(-6).toUpperCase()}</Text>
+                    <View style={styles.cardActions}>
+                      {(appt.status === "pending" || appt.status === "confirmed") && (
+                        <TouchableOpacity
+                          style={styles.cancelChip}
+                          onPress={(e) => handleCancel(appt._id, e)}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="close-circle-outline" size={13} color="#C62828" />
+                          <Text style={styles.cancelChipText}>Cancel</Text>
+                        </TouchableOpacity>
+                      )}
+                      <View style={styles.viewDetailChip}>
+                        <Text style={styles.viewDetailText}>View Details</Text>
+                        <Ionicons name="chevron-forward" size={12} color="#3E7B27" />
+                      </View>
+                    </View>
                   </View>
-                )}
-
-                {/* Cancel Button */}
-                {(appt.status === "pending" || appt.status === "confirmed") && (
-                  <TouchableOpacity style={styles.cancelBtn} onPress={() => handleCancel(appt._id)}>
-                    <Text style={styles.cancelText}>Cancel Appointment</Text>
-                  </TouchableOpacity>
-                )}
-
-                <Text style={styles.bookingId}>ID: {appt._id.slice(-8).toUpperCase()}</Text>
-              </View>
+                </View>
+              </TouchableOpacity>
             );
           })
         )}
@@ -318,133 +393,172 @@ export default function BookingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F0F7F0" },
+  container: { flex: 1, backgroundColor: "#F2F7F2" },
 
-  // Filter
-  filterRow: {
+  filterBar: {
     flexDirection: "row", alignItems: "center", gap: 8,
     backgroundColor: "#fff", paddingHorizontal: 16, paddingVertical: 10,
-    borderBottomWidth: 1, borderBottomColor: "#D4EDD4",
+    borderBottomWidth: 1, borderBottomColor: "#E0EEE0",
   },
   filterBtn: {
     flexDirection: "row", alignItems: "center", gap: 6,
     backgroundColor: "#F0F7F0", borderRadius: 20,
-    paddingHorizontal: 14, paddingVertical: 8,
+    paddingHorizontal: 14, paddingVertical: 7,
     borderWidth: 1, borderColor: "#A8D96C",
   },
   filterBtnText: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
-  clearFilterBtn: { flexDirection: "row", alignItems: "center", gap: 4 },
-  clearFilterText: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#C62828" },
-  filterCount: { marginLeft: "auto", fontSize: 12, fontFamily: "Inter_400Regular", color: "#888" },
-
-  // Modal
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", alignItems: "center" },
-  modalBox: {
-    backgroundColor: "#fff", borderRadius: 20, padding: 20,
-    width: "80%", elevation: 10,
+  filterBtnActive: { backgroundColor: "#0B3D2E", borderColor: "#0B3D2E" },
+  clearBtn: { flexDirection: "row", alignItems: "center", gap: 4 },
+  clearBtnText: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#C62828" },
+  countBadge: {
+    marginLeft: "auto", backgroundColor: "#0B3D2E",
+    borderRadius: 20, paddingHorizontal: 10, paddingVertical: 3,
   },
-  modalTitle: { fontSize: 16, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 16 },
+  countText: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
+
+  // Modal bottom sheet
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" },
+  modalSheet: {
+    backgroundColor: "#fff", borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    padding: 20, paddingBottom: 36,
+  },
+  modalHandle: {
+    width: 40, height: 4, backgroundColor: "#ddd",
+    borderRadius: 2, alignSelf: "center", marginBottom: 16,
+  },
+  modalTitle: { fontSize: 16, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 14 },
   modalOption: {
     flexDirection: "row", alignItems: "center", gap: 12,
-    paddingVertical: 12, paddingHorizontal: 12, borderRadius: 12, marginBottom: 6,
+    paddingVertical: 12, paddingHorizontal: 12, borderRadius: 14, marginBottom: 6,
     backgroundColor: "#F0F7F0",
   },
   modalOptionActive: { backgroundColor: "#0B3D2E" },
-  modalOptionText: { fontSize: 14, fontFamily: "Inter_400Regular", color: "#0B3D2E" },
+  modalOptionIcon: {
+    width: 34, height: 34, borderRadius: 10,
+    backgroundColor: "#E8F5E8", justifyContent: "center", alignItems: "center",
+  },
+  modalOptionIconActive: { backgroundColor: "rgba(168,217,108,0.2)" },
+  modalOptionText: { flex: 1, fontSize: 14, fontFamily: "Inter_400Regular", color: "#0B3D2E" },
   modalOptionTextActive: { color: "#fff", fontFamily: "Poppins_700Bold" },
+  modalOptionCount: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#888", marginRight: 6 },
 
-  scroll: { padding: 16, paddingBottom: 40 },
+  scroll: { padding: 14, paddingBottom: 40 },
 
   // New Booking
   newBookingBtn: {
-    backgroundColor: "#0B3D2E", borderRadius: 16, padding: 16,
-    flexDirection: "row", alignItems: "center", marginBottom: 16, elevation: 3,
+    backgroundColor: "#0B3D2E", borderRadius: 18, padding: 16,
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    marginBottom: 14, elevation: 4,
   },
+  newBookingLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
   newBookingIconBox: {
-    width: 36, height: 36, borderRadius: 10,
-    backgroundColor: "rgba(168,217,108,0.2)",
-    justifyContent: "center", alignItems: "center", marginRight: 12,
+    width: 40, height: 40, borderRadius: 12,
+    backgroundColor: "rgba(168,217,108,0.15)",
+    justifyContent: "center", alignItems: "center",
   },
-  newBookingIcon: { fontSize: 18 },
-  newBookingText: { flex: 1, fontSize: 15, fontFamily: "Poppins_700Bold", color: "#fff" },
+  newBookingTitle: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#fff" },
+  newBookingSub: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#A8D96C", marginTop: 1 },
 
   // Stats
-  statsRow: { flexDirection: "row", gap: 10, marginBottom: 16 },
+  statsRow: { flexDirection: "row", gap: 8, marginBottom: 14 },
   statCard: {
-    flex: 1, backgroundColor: "#fff", borderRadius: 14, padding: 12,
-    alignItems: "center", elevation: 2,
-    borderWidth: 1, borderColor: "#D4EDD4",
+    flex: 1, backgroundColor: "#fff", borderRadius: 14, paddingVertical: 12,
+    alignItems: "center", elevation: 1, borderWidth: 1, borderColor: "#E0EEE0",
   },
-  statNum: { fontSize: 20, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
-  statLabel: { fontSize: 10, fontFamily: "Inter_400Regular", color: "#666", marginTop: 2 },
+  statNum: { fontSize: 20, fontFamily: "Poppins_700Bold" },
+  statLabel: { fontSize: 10, fontFamily: "Inter_400Regular", color: "#888", marginTop: 2 },
 
-  // Empty
+  // Empty / Loading
   emptyBox: { alignItems: "center", paddingVertical: 60 },
-  emptyEmoji: { fontSize: 56, marginBottom: 12 },
-  emptyTitle: { fontSize: 18, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 6 },
+  emptyEmoji: { fontSize: 52, marginBottom: 12 },
+  emptyTitle: { fontSize: 17, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 6 },
   emptySubtitle: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#999" },
+  loadingText: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#888", marginTop: 12 },
 
   // Card
   card: {
-    backgroundColor: "#fff", borderRadius: 16, padding: 16,
-    marginBottom: 14, elevation: 2,
-    borderWidth: 1, borderColor: "#D4EDD4",
+    backgroundColor: "#fff", borderRadius: 18, marginBottom: 12,
+    elevation: 2, borderWidth: 1, borderColor: "#E0EEE0",
+    flexDirection: "row", overflow: "hidden",
   },
-  cardHeader: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
-  serviceIconBox: {
-    width: 44, height: 44, borderRadius: 12,
-    backgroundColor: "#E8F5E8",
-    justifyContent: "center", alignItems: "center", marginRight: 12,
+  cardBar: { width: 5 },
+  cardInner: { flex: 1, padding: 14 },
+
+  cardTop: { flexDirection: "row", alignItems: "center", marginBottom: 10 },
+  cardIconBox: {
+    width: 42, height: 42, borderRadius: 12,
+    backgroundColor: "#E8F5E8", justifyContent: "center", alignItems: "center", marginRight: 10,
   },
-  serviceIconText: { fontSize: 22 },
-  cardHeaderInfo: { flex: 1 },
-  serviceName: { fontSize: 15, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 2 },
-  petName: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#666" },
+  cardIconText: { fontSize: 20 },
+  cardTopInfo: { flex: 1 },
+  cardServiceName: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 2 },
+  cardPetName: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#666" },
+
   statusBadge: {
+    flexDirection: "row", alignItems: "center", gap: 3,
+    paddingHorizontal: 9, paddingVertical: 4, borderRadius: 20,
+  },
+  statusIcon: { fontSize: 10 },
+  statusText: { fontSize: 10, fontFamily: "Poppins_700Bold" },
+
+  divider: { height: 1, backgroundColor: "#F0F7F0", marginBottom: 10 },
+
+  chipsRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 10 },
+  chip: {
     flexDirection: "row", alignItems: "center", gap: 4,
-    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20,
+    backgroundColor: "#F0F7F0", borderRadius: 20,
+    paddingHorizontal: 10, paddingVertical: 5,
   },
-  statusIcon: { fontSize: 11 },
-  statusText: { fontSize: 11, fontFamily: "Poppins_700Bold" },
+  chipText: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#333" },
+  chipAccent: { backgroundColor: "#E8F5E8" },
+  chipAccentText: { fontSize: 11, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
 
-  divider: { height: 1, backgroundColor: "#E8F5E8", marginBottom: 12 },
-
-  detailsRow: { flexDirection: "row", gap: 16, marginBottom: 10, flexWrap: "wrap" },
-  detailItem: { flexDirection: "row", alignItems: "center", gap: 4 },
-  detailIcon: { fontSize: 13 },
-  detailText: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#333" },
-
-  petInfoBox: {
-    flexDirection: "row", gap: 16, marginBottom: 10,
-    backgroundColor: "#F0F7F0", borderRadius: 10, padding: 10,
-  },
-  petInfoText: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#3E7B27" },
-
-  notesBox: {
-    backgroundColor: "#F0F7F0", borderRadius: 10, padding: 10, marginBottom: 10,
-  },
-  notesText: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#555" },
-
-  cancelBtn: {
-    borderWidth: 1.5, borderColor: "#C62828", borderRadius: 12,
-    paddingVertical: 10, alignItems: "center", marginBottom: 10,
-  },
-  cancelText: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#C62828" },
-
-  payBanner: {
-    flexDirection: "row", alignItems: "center", gap: 10,
-    backgroundColor: "#A8D96C", borderRadius: 12, padding: 12, marginBottom: 10,
-  },
-  payBannerInfo: { flex: 1 },
-  payBannerTitle: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
-  payBannerSub: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#1A5C3A", marginTop: 2 },
-  payBannerArrow: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
-
-  paidBanner: {
+  payInline: {
     flexDirection: "row", alignItems: "center", gap: 8,
-    backgroundColor: "#E8F5E8", borderRadius: 12, padding: 10, marginBottom: 10,
+    backgroundColor: "#A8D96C", borderRadius: 12, padding: 10, marginBottom: 8,
   },
-  paidBannerText: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#2E7D32" },
+  payInlineText: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
 
-  bookingId: { fontSize: 10, fontFamily: "Inter_400Regular", color: "#bbb", textAlign: "right" },
+  paidChip: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    backgroundColor: "#E8F5E8", borderRadius: 10, padding: 8, marginBottom: 8,
+    alignSelf: "flex-start",
+  },
+  paidChipText: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#2E7D32" },
+
+  cardBottom: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    marginTop: 4,
+  },
+  cardId: { fontSize: 10, fontFamily: "Inter_400Regular", color: "#bbb" },
+  cardActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  cancelChip: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    borderWidth: 1, borderColor: "#FFCDD2", borderRadius: 20,
+    paddingHorizontal: 10, paddingVertical: 4, backgroundColor: "#FFF5F5",
+  },
+  cancelChipText: { fontSize: 11, fontFamily: "Poppins_700Bold", color: "#C62828" },
+  viewDetailChip: {
+    flexDirection: "row", alignItems: "center", gap: 2,
+    backgroundColor: "#E8F5E8", borderRadius: 20,
+    paddingHorizontal: 10, paddingVertical: 4,
+  },
+  viewDetailText: { fontSize: 11, fontFamily: "Poppins_700Bold", color: "#3E7B27" },
+
+  // Calendar
+  calOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "center", alignItems: "center" },
+  calBox: { backgroundColor: "#fff", borderRadius: 20, padding: 20, width: "88%", elevation: 10 },
+  calHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },
+  calMonthTxt: { fontSize: 16, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+  calDayRow: { flexDirection: "row", marginBottom: 6 },
+  calDayName: { flex: 1, textAlign: "center", fontSize: 11, fontFamily: "Poppins_700Bold", color: "#3E7B27" },
+  calDay: { flex: 1, aspectRatio: 1, justifyContent: "center", alignItems: "center", borderRadius: 8, margin: 1 },
+  calDayEmpty: { flex: 1, aspectRatio: 1, margin: 1 },
+  calDaySelected: { backgroundColor: "#0B3D2E" },
+  calDayToday: { backgroundColor: "#E8F5E8", borderWidth: 1.5, borderColor: "#3E7B27" },
+  calDayTxt: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#1A1A1A" },
+  calDayTxtSelected: { fontFamily: "Poppins_700Bold", color: "#A8D96C" },
+  calDayTxtToday: { fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+  calTodayBtn: { backgroundColor: "#0B3D2E", borderRadius: 12, paddingVertical: 12, alignItems: "center" },
+  calTodayBtnTxt: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
 });

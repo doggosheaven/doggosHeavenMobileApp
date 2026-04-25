@@ -5,6 +5,7 @@ import {
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
 
@@ -20,6 +21,7 @@ const fmtDisplay = (d) =>
   d.toLocaleDateString("en-IN", { weekday: "short", day: "2-digit", month: "short", year: "numeric" });
 
 export default function StaffAttendance() {
+  const router = useRouter();
   const [date, setDate] = useState(new Date());
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -88,8 +90,11 @@ export default function StaffAttendance() {
     <View style={s.container}>
       {/* Header */}
       <View style={s.header}>
+        <TouchableOpacity onPress={() => router.back()} style={s.backBtn} activeOpacity={0.8}>
+          <Ionicons name="close" size={22} color="#fff" />
+        </TouchableOpacity>
         <Text style={s.headerTitle}>Attendance</Text>
-        <Text style={s.headerSub}>{list.length} scheduled</Text>
+        <View style={{ width: 36 }} />
       </View>
 
       {/* Date Navigator */}
@@ -216,9 +221,10 @@ const s = StyleSheet.create({
   header: {
     backgroundColor: "#0B3D2E", paddingHorizontal: 20,
     paddingTop: 52, paddingBottom: 16,
-    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+    flexDirection: "row", alignItems: "center",
   },
-  headerTitle: { fontSize: 20, fontFamily: "Poppins_700Bold", color: "#fff" },
+  backBtn: { width: 36, height: 36, justifyContent: "center" },
+  headerTitle: { flex: 1, fontSize: 20, fontFamily: "Poppins_700Bold", color: "#fff", textAlign: "center" },
   headerSub: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#A8D96C" },
 
   dateNav: {

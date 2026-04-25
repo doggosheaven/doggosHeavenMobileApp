@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  ActivityIndicator, RefreshControl, TextInput, Modal, Alert, Platform,
+  ActivityIndicator, RefreshControl, TextInput, Modal, Alert, Platform, Image, KeyboardAvoidingView,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
@@ -163,7 +163,11 @@ function PetDetail({ pet: initialPet, onBack, token }) {
         {/* Avatar Card */}
         <View style={s.avatarCard}>
           <View style={s.bigAvatar}>
-            <Text style={s.bigAvatarTxt}>{pet.name?.slice(0, 2).toUpperCase()}</Text>
+            {pet.image ? (
+              <Image source={{ uri: pet.image }} style={s.bigAvatarImg} />
+            ) : (
+              <Text style={s.bigAvatarTxt}>{pet.name?.slice(0, 2).toUpperCase()}</Text>
+            )}
           </View>
           <Text style={s.petName}>{pet.name}</Text>
           <Text style={s.petBreed}>{pet.breed} • {pet.species}</Text>
@@ -269,7 +273,7 @@ function PetDetail({ pet: initialPet, onBack, token }) {
 
       {/* Blacklist Reason Modal */}
       <Modal visible={blacklistModal} transparent animationType="slide" onRequestClose={() => setBlacklistModal(false)}>
-        <View style={s.overlay}>
+        <KeyboardAvoidingView style={s.overlay} behavior={Platform.OS === "ios" ? "padding" : "height"}>
           <View style={s.sheet}>
             <View style={s.sheetHeader}>
               <Text style={s.sheetTitle}>🚫 Blacklist Pet</Text>
@@ -305,7 +309,7 @@ function PetDetail({ pet: initialPet, onBack, token }) {
             </TouchableOpacity>
             <View style={{ height: 20 }} />
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Visits Modal */}
@@ -350,7 +354,7 @@ function PetDetail({ pet: initialPet, onBack, token }) {
 
       {/* Add Visit Modal */}
       <Modal visible={addVisitModal} transparent animationType="slide" onRequestClose={() => setAddVisitModal(false)}>
-        <View style={s.overlay}>
+        <KeyboardAvoidingView style={s.overlay} behavior={Platform.OS === "ios" ? "padding" : "height"}>
           <View style={[s.sheet, { maxHeight: "90%" }]}>
             <View style={s.sheetHeader}>
               <Text style={s.sheetTitle}>Add Visit</Text>
@@ -471,7 +475,7 @@ function PetDetail({ pet: initialPet, onBack, token }) {
               <View style={{ height: 20 }} />
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Vaccination Modal */}
@@ -573,9 +577,12 @@ export default function StaffPetMaster() {
 
   // List screen
   return (
-    <View style={s.container}>
+    <KeyboardAvoidingView style={s.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       {/* Header */}
       <View style={s.header}>
+        <TouchableOpacity onPress={() => router.back()} style={s.backBtn} activeOpacity={0.8}>
+          <Ionicons name="close" size={24} color="#fff" />
+        </TouchableOpacity>
         <Text style={s.headerTitle}>Pet Master</Text>
         <TouchableOpacity style={s.addBtn} onPress={() => router.push("/staff/addpet")} activeOpacity={0.8}>
           <Ionicons name="add" size={18} color="#0B3D2E" />
@@ -646,7 +653,11 @@ export default function StaffPetMaster() {
                 activeOpacity={0.82}
               >
                 <View style={[s.petAvatar, pet.isBlacklisted && { backgroundColor: "#C62828" }]}>
-                  <Text style={s.petAvatarTxt}>{pet.name?.slice(0, 2).toUpperCase() || "🐾"}</Text>
+                  {pet.image ? (
+                    <Image source={{ uri: pet.image }} style={s.petAvatarImg} />
+                  ) : (
+                    <Text style={s.petAvatarTxt}>{pet.name?.slice(0, 2).toUpperCase() || "🐾"}</Text>
+                  )}
                 </View>
                 <View style={s.petCardBody}>
                   <Text style={s.petCardName}>{pet.name}</Text>
@@ -678,7 +689,7 @@ export default function StaffPetMaster() {
           <View style={{ height: 30 }} />
         </ScrollView>
       )}
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -722,7 +733,9 @@ const s = StyleSheet.create({
   petAvatar: {
     width: 50, height: 50, borderRadius: 25,
     backgroundColor: "#0B3D2E", justifyContent: "center", alignItems: "center",
+    overflow: "hidden",
   },
+  petAvatarImg: { width: 50, height: 50, borderRadius: 25 },
   petAvatarTxt: { fontSize: 17, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
   petCardBody: { flex: 1 },
   petCardName: { fontSize: 15, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 2 },
@@ -750,7 +763,9 @@ const s = StyleSheet.create({
   bigAvatar: {
     width: 80, height: 80, borderRadius: 40,
     backgroundColor: "#A8D96C", justifyContent: "center", alignItems: "center", marginBottom: 12,
+    overflow: "hidden",
   },
+  bigAvatarImg: { width: 80, height: 80, borderRadius: 40 },
   bigAvatarTxt: { fontSize: 28, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
   petName: { fontSize: 22, fontFamily: "Poppins_700Bold", color: "#fff", marginBottom: 4 },
   petBreed: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#aaa", marginBottom: 10 },

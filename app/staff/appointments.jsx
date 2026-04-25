@@ -1,15 +1,17 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   View, Text, ScrollView, FlatList, StyleSheet, TouchableOpacity,
   ActivityIndicator, RefreshControl, Alert, Modal, TextInput,
+  KeyboardAvoidingView, Platform,
 } from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { WebView } from "react-native-webview";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
 import { buildInvoiceHTML, downloadInvoicePDF } from "../../utils/invoiceGenerator";
+import { useStaff } from "../../context/StaffContext";
 
 const FILTERS = ["All", "Pending", "Confirmed", "Completed", "Cancelled"];
 const STATUS_COLOR = { pending: "#F59E0B", confirmed: "#3E7B27", completed: "#0B3D2E", cancelled: "#C62828" };
@@ -20,12 +22,10 @@ function formatDate(d) {
 }
 
 export default function StaffAppointments() {
-  const [appointments, setAppointments] = useState([]);
   const [filter, setFilter] = useState("All");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [actionId, setActionId] = useState(null);
-  const [token, setToken] = useState("");
   const [invoiceAppt, setInvoiceAppt] = useState(null);
   const [invoiceHTML, setInvoiceHTML] = useState("");
   const [downloading, setDownloading] = useState(false);
@@ -38,47 +38,35 @@ export default function StaffAppointments() {
   const [confirmAmount, setConfirmAmount] = useState("");
   const [confirmAmountAppt, setConfirmAmountAppt] = useState(null);
   const [confirmAmountLoading, setConfirmAmountLoading] = useState(false);
+  const [calModal, setCalModal] = useState(false);
+  const [calMonth, setCalMonth] = useState(new Date());
+  const { appointments, setAppointments, token, setToken, loadAppointments } = useStaff();
+
+  useEffect(() => {
+    if (!token) getAuth().then(({ token: t }) => setToken(t || "")).catch(() => {});
+    loadAppointments();
+  }, [loadAppointments, setToken, token]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadAppointments(true);
+    setRefreshing(false);
+  };
 
   const openInvoice = async (appt) => {
     setDetailAppt(null);
     setInvoiceHTML("");
     setInvoiceAppt(appt);
-    const html = await buildInvoiceHTML(appt);
-    setInvoiceHTML(html);
+    try {
+      const html = await buildInvoiceHTML(appt);
+      setInvoiceHTML(html);
+    } catch {
+      Alert.alert("Error", "Could not generate invoice.");
+      setInvoiceAppt(null);
+    }
   };
 
-  const load = useCallback(async () => {
-    try {
-      const { token: t } = await getAuth();
-      setToken(t || "");
-      const res = await fetch(`${BASE_URL}/api/v1/customerappointment/getallappoint`, {
-        headers: { Authorization: t || "" },
-      });
-      const data = await res.json();
-      if (data.success) setAppointments(data.data || []);
-    } catch (e) { console.log(e); }
-    finally { setLoading(false); setRefreshing(false); }
-  }, []);
-
-  useFocusEffect(useCallback(() => { load(); }, [load]));
-
-  const handleConfirm = async (id) => {
-    setActionId(id);
-    try {
-      const res = await fetch(`${BASE_URL}/api/v1/customerappointment/confirmappoint/${id}`, {
-        method: "PATCH", headers: { Authorization: token },
-      });
-      const data = await res.json();
-      if (data.success) {
-        setAppointments(prev => prev.map(a => a._id === id ? { ...a, status: "confirmed" } : a));
-        setDetailAppt(prev => prev?._id === id ? { ...prev, status: "confirmed" } : prev);
-        Alert.alert("✅ Confirmed", "Appointment confirmed successfully.");
-      } else Alert.alert("Error", data.message);
-    } catch { Alert.alert("Error", "Network error"); }
-    finally { setActionId(null); }
-  };
-
-  const handleUpdateStatus = async (id, status, extraBody = {}) => {
+const handleUpdateStatus = async (id, status, extraBody = {}) => {
     setActionId(id);
     try {
       const res = await fetch(`${BASE_URL}/api/v1/customerappointment/updateappoint/${id}/status`, {
@@ -131,30 +119,95 @@ export default function StaffAppointments() {
     }
   };
 
-  const filtered = filter === "All" ? appointments : appointments.filter(a => a.status === filter.toLowerCase());
+  const { filterDate: filterDateParam } = useLocalSearchParams();
+  const router = useRouter();
+  const [selectedDate, setSelectedDate] = useState(filterDateParam || null);
+
+  const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const DAY_NAMES = ["Su","Mo","Tu","We","Th","Fr","Sa"];
+  const calYear = calMonth.getFullYear();
+  const calMonthIdx = calMonth.getMonth();
+  const daysInMonth = new Date(calYear, calMonthIdx + 1, 0).getDate();
+  const firstDay = new Date(calYear, calMonthIdx, 1).getDay();
+  const calDays = [...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
+  const isSameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
+
+  const dateFiltered = selectedDate
+    ? appointments.filter(a => isSameDay(a.appointmentDate, selectedDate))
+    : appointments;
+
+  const [showFilterModal, setShowFilterModal] = useState(false);
+  const filtered = filter === "All" ? dateFiltered : dateFiltered.filter(a => a.status === filter.toLowerCase());
   const appt = detailAppt;
 
   return (
     <View style={s.container}>
       <View style={s.header}>
-        <Text style={s.headerTitle}>My Bookings</Text>
-        <Text style={s.headerCount}>{appointments.length} total</Text>
+        <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
+          <Ionicons name="close" size={24} color="#fff" />
+        </TouchableOpacity>
+        <Text style={s.headerTitle} numberOfLines={1}>
+          {selectedDate ? `Appts — ${new Date(selectedDate).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}` : "All Bookings"}
+        </Text>
+        <View style={s.headerRight}>
+          <Text style={s.headerCount}>{filtered.length} / {appointments.length}</Text>
+          <TouchableOpacity
+            style={[s.filterIconBtn, !!selectedDate && s.filterIconBtnActive]}
+            onPress={() => setCalModal(true)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="calendar-outline" size={20} color={selectedDate ? "#0B3D2E" : "#A8D96C"} />
+            {selectedDate && <View style={s.filterDot} />}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[s.filterIconBtn, filter !== "All" && s.filterIconBtnActive]}
+            onPress={() => setShowFilterModal(true)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="options-outline" size={20} color={filter !== "All" ? "#0B3D2E" : "#A8D96C"} />
+            {filter !== "All" && <View style={s.filterDot} />}
+          </TouchableOpacity>
+        </View>
       </View>
 
-      <View style={s.filterWrapper}>
-        <FlatList
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          data={FILTERS}
-          keyExtractor={(f) => f}
-          contentContainerStyle={s.filterContent}
-          renderItem={({ item: f }) => (
-            <TouchableOpacity style={[s.filterChip, filter === f && s.filterChipActive]} onPress={() => setFilter(f)}>
-              <Text style={[s.filterText, filter === f && s.filterTextActive]}>{f}</Text>
-            </TouchableOpacity>
-          )}
-        />
-      </View>
+      {/* Filter Bottom Sheet */}
+      <Modal visible={showFilterModal} transparent animationType="slide" onRequestClose={() => setShowFilterModal(false)}>
+        <TouchableOpacity style={s.filterOverlay} activeOpacity={1} onPress={() => setShowFilterModal(false)}>
+          <TouchableOpacity activeOpacity={1} style={s.filterSheet}>
+            <View style={s.filterHandle} />
+            <Text style={s.filterSheetTitle}>Filter Bookings</Text>
+            {FILTERS.map((f) => (
+              <TouchableOpacity
+                key={f}
+                style={[s.filterOption, filter === f && s.filterOptionActive]}
+                onPress={() => { setFilter(f); setShowFilterModal(false); }}
+                activeOpacity={0.8}
+              >
+                <Ionicons
+                  name={f === "All" ? "apps-outline" : f === "Pending" ? "time-outline" : f === "Confirmed" ? "checkmark-circle-outline" : f === "Completed" ? "ribbon-outline" : "close-circle-outline"}
+                  size={20}
+                  color={filter === f ? "#A8D96C" : "#0B3D2E"}
+                />
+                <Text style={[s.filterOptionTxt, filter === f && s.filterOptionTxtActive]}>{f}</Text>
+                {filter === f && <Ionicons name="checkmark" size={18} color="#A8D96C" style={{ marginLeft: "auto" }} />}
+              </TouchableOpacity>
+            ))}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Date Filter Banner */}
+      {selectedDate && (
+        <View style={s.dateBanner}>
+          <Ionicons name="calendar" size={14} color="#B45309" />
+          <Text style={s.dateBannerTxt}>
+            {new Date(selectedDate).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
+          </Text>
+          <TouchableOpacity onPress={() => setSelectedDate(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="close-circle" size={16} color="#B45309" />
+          </TouchableOpacity>
+        </View>
+      )}
 
       {loading ? (
         <ActivityIndicator size="large" color="#0B3D2E" style={{ flex: 1 }} />
@@ -162,7 +215,7 @@ export default function StaffAppointments() {
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={s.scroll}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor="#0B3D2E" />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0B3D2E" />}
         >
           {filtered.length === 0 ? (
             <View style={s.emptyBox}>
@@ -349,7 +402,8 @@ export default function StaffAppointments() {
 
       {/* Payment Modal */}
       <Modal visible={payModal} transparent animationType="slide" onRequestClose={() => setPayModal(false)}>
-        <View style={s.modalOverlay}>
+        <KeyboardAvoidingView style={s.modalOverlay} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setPayModal(false)} />
           <View style={s.modalSheet}>
             <View style={s.modalHeader}>
               <Text style={s.modalTitle}>Record Payment</Text>
@@ -430,12 +484,13 @@ export default function StaffAppointments() {
               )}
             </TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Confirm Amount Modal — for services with no price */}
       <Modal visible={confirmAmountModal} transparent animationType="slide" onRequestClose={() => setConfirmAmountModal(false)}>
-        <View style={s.modalOverlay}>
+        <KeyboardAvoidingView style={s.modalOverlay} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setConfirmAmountModal(false)} />
           <View style={s.modalSheet}>
             <View style={s.modalHeader}>
               <Text style={s.modalTitle}>Set Service Amount</Text>
@@ -502,7 +557,56 @@ export default function StaffAppointments() {
             </TouchableOpacity>
             <View style={{ height: 20 }} />
           </View>
-        </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Calendar Date Picker Modal */}
+      <Modal visible={calModal} transparent animationType="fade" onRequestClose={() => setCalModal(false)}>
+        <TouchableOpacity style={s.calOverlay} activeOpacity={1} onPress={() => setCalModal(false)}>
+          <TouchableOpacity activeOpacity={1} style={s.calBox}>
+            <View style={s.calHeader}>
+              <TouchableOpacity onPress={() => setCalMonth(new Date(calYear, calMonthIdx - 1, 1))} hitSlop={{ top:8,bottom:8,left:8,right:8 }}>
+                <Ionicons name="chevron-back" size={20} color="#0B3D2E" />
+              </TouchableOpacity>
+              <Text style={s.calMonthTxt}>{MONTH_NAMES[calMonthIdx]} {calYear}</Text>
+              <TouchableOpacity onPress={() => setCalMonth(new Date(calYear, calMonthIdx + 1, 1))} hitSlop={{ top:8,bottom:8,left:8,right:8 }}>
+                <Ionicons name="chevron-forward" size={20} color="#0B3D2E" />
+              </TouchableOpacity>
+            </View>
+            <View style={s.calDayRow}>
+              {DAY_NAMES.map(d => <Text key={d} style={s.calDayName}>{d}</Text>)}
+            </View>
+            <FlatList
+              data={calDays}
+              numColumns={7}
+              keyExtractor={(_, i) => String(i)}
+              scrollEnabled={false}
+              renderItem={({ item: day }) => {
+                if (!day) return <View style={s.calDayEmpty} />;
+                const thisDate = new Date(calYear, calMonthIdx, day);
+                const isSelected = selectedDate && isSameDay(thisDate, selectedDate);
+                const isTodayDay = isSameDay(thisDate, new Date());
+                return (
+                  <TouchableOpacity
+                    style={[s.calDay, isSelected && s.calDaySelected, isTodayDay && !isSelected && s.calDayToday]}
+                    onPress={() => { setSelectedDate(thisDate); setCalModal(false); }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[s.calDayTxt, isSelected && s.calDayTxtSelected, isTodayDay && !isSelected && s.calDayTxtToday]}>{day}</Text>
+                  </TouchableOpacity>
+                );
+              }}
+            />
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 14 }}>
+              <TouchableOpacity style={[s.calTodayBtn, { flex: 1, backgroundColor: "#F0F7F0" }]} onPress={() => { setSelectedDate(new Date()); setCalModal(false); }} activeOpacity={0.8}>
+                <Text style={[s.calTodayBtnTxt, { color: "#0B3D2E" }]}>Today</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[s.calTodayBtn, { flex: 1 }]} onPress={() => { setSelectedDate(null); setCalModal(false); }} activeOpacity={0.8}>
+                <Text style={s.calTodayBtnTxt}>Show All</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
 
       {/* Invoice Modal */}
@@ -548,22 +652,40 @@ const s = StyleSheet.create({
   header: {
     backgroundColor: "#0B3D2E", paddingHorizontal: 20,
     paddingTop: 52, paddingBottom: 16,
-    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+    flexDirection: "row", alignItems: "center", gap: 12,
   },
-  headerTitle: { fontSize: 20, fontFamily: "Poppins_700Bold", color: "#fff" },
+  backBtn: { width: 32, height: 32, justifyContent: "center", alignItems: "center" },
+  headerTitle: { fontSize: 20, fontFamily: "Poppins_700Bold", color: "#fff", flex: 1 },
+  headerRight: { flexDirection: "row", alignItems: "center", gap: 10 },
   headerCount: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#A8D96C" },
-  filterWrapper: {
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#D4EDD4",
-    height: 56,
-    justifyContent: "center",
+  filterIconBtn: {
+    position: "relative", padding: 8,
+    backgroundColor: "rgba(168,217,108,0.15)", borderRadius: 12,
   },
-  filterContent: { paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
-  filterChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, backgroundColor: "#F0F7F0", borderWidth: 1, borderColor: "#D4EDD4" },
-  filterChipActive: { backgroundColor: "#0B3D2E", borderColor: "#0B3D2E" },
-  filterText: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#3E7B27" },
-  filterTextActive: { color: "#fff", fontFamily: "Poppins_700Bold" },
+  filterIconBtnActive: { backgroundColor: "#A8D96C" },
+  filterDot: {
+    position: "absolute", top: 5, right: 5,
+    width: 7, height: 7, borderRadius: 4,
+    backgroundColor: "#F59E0B", borderWidth: 1, borderColor: "#0B3D2E",
+  },
+  filterOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" },
+  filterSheet: {
+    backgroundColor: "#fff", borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    padding: 20, paddingBottom: 36,
+  },
+  filterHandle: {
+    width: 40, height: 4, borderRadius: 2, backgroundColor: "#D4EDD4",
+    alignSelf: "center", marginBottom: 16,
+  },
+  filterSheetTitle: { fontSize: 16, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 14 },
+  filterOption: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    paddingVertical: 13, paddingHorizontal: 14, borderRadius: 12,
+    marginBottom: 6, backgroundColor: "#F0F7F0",
+  },
+  filterOptionActive: { backgroundColor: "#0B3D2E" },
+  filterOptionTxt: { fontSize: 14, fontFamily: "Inter_400Regular", color: "#0B3D2E", flex: 1 },
+  filterOptionTxtActive: { color: "#fff", fontFamily: "Poppins_700Bold" },
   scroll: { padding: 16, paddingBottom: 40 },
   card: {
     backgroundColor: "#fff", borderRadius: 16, padding: 14,
@@ -638,4 +760,23 @@ const s = StyleSheet.create({
   downloadBtn: { backgroundColor: "#0B3D2E", borderRadius: 14, height: 52, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, elevation: 3 },
   downloadBtnText: { fontSize: 15, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
   apptId: { fontSize: 10, fontFamily: "Inter_400Regular", color: "#bbb", textAlign: "right", marginTop: 8 },
+
+  dateBanner: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#FFF9E6", borderRadius: 12, padding: 10, marginHorizontal: 16, marginTop: 12, marginBottom: 4, borderWidth: 1, borderColor: "#FDE68A" },
+  dateBannerTxt: { flex: 1, fontSize: 13, fontFamily: "Poppins_700Bold", color: "#B45309" },
+
+  calOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "center", alignItems: "center" },
+  calBox: { backgroundColor: "#fff", borderRadius: 20, padding: 20, width: "88%", elevation: 10 },
+  calHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },
+  calMonthTxt: { fontSize: 16, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+  calDayRow: { flexDirection: "row", marginBottom: 6 },
+  calDayName: { flex: 1, textAlign: "center", fontSize: 11, fontFamily: "Poppins_700Bold", color: "#3E7B27" },
+  calDay: { flex: 1, aspectRatio: 1, justifyContent: "center", alignItems: "center", borderRadius: 8, margin: 1 },
+  calDayEmpty: { flex: 1, aspectRatio: 1, margin: 1 },
+  calDaySelected: { backgroundColor: "#0B3D2E" },
+  calDayToday: { backgroundColor: "#E8F5E8", borderWidth: 1.5, borderColor: "#3E7B27" },
+  calDayTxt: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#1A1A1A" },
+  calDayTxtSelected: { fontFamily: "Poppins_700Bold", color: "#A8D96C" },
+  calDayTxtToday: { fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+  calTodayBtn: { backgroundColor: "#0B3D2E", borderRadius: 12, paddingVertical: 12, alignItems: "center" },
+  calTodayBtnTxt: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
 });

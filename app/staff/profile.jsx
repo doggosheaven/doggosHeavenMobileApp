@@ -1,11 +1,12 @@
 import { useState, useCallback } from "react";
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert,
-  Modal, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform,
+  Modal, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, Image,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import * as ImagePicker from "expo-image-picker";
 import { getAuth, clearAuth, saveAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
 
@@ -18,6 +19,7 @@ export default function StaffProfile() {
   const [form, setForm] = useState({ fullName: "", phone: "" });
   const [pwForm, setPwForm] = useState({ current: "", newPw: "", confirm: "" });
   const [saving, setSaving] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [showPw, setShowPw] = useState({ current: false, newPw: false, confirm: false });
 
   useFocusEffect(useCallback(() => {
@@ -30,6 +32,65 @@ export default function StaffProfile() {
   const getInitials = (name) => {
     if (!name) return "S";
     return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
+  };
+
+  const handlePickPhoto = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission needed", "Allow photo access to update profile picture.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    });
+    if (result.canceled) return;
+    const uri = result.assets[0].uri;
+    setUploadingPhoto(true);
+    try {
+      const formData = new FormData();
+      formData.append("profilePhoto", {
+        uri,
+        name: "profile.jpg",
+        type: "image/jpeg",
+      });
+      const res = await fetch(`${BASE_URL}/api/v1/auth/updateprofilephoto`, {
+        method: "PUT",
+        headers: { Authorization: token },
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.success) {
+        const updated = { ...user, profilePhoto: data.profilePhoto || uri };
+        await saveAuth(token, updated);
+        setUser(updated);
+        Alert.alert("✅ Done", "Profile photo updated!");
+      } else {
+        // Fallback: save locally if backend doesn't support it
+        const updated = { ...user, profilePhoto: uri };
+        await saveAuth(token, updated);
+        setUser(updated);
+      }
+    } catch {
+      // Fallback: save locally
+      const updated = { ...user, profilePhoto: uri };
+      await saveAuth(token, updated);
+      setUser(updated);
+    } finally { setUploadingPhoto(false); }
+  };
+
+  const handlePhotoOptions = () => {
+    Alert.alert("Profile Photo", "Choose an option", [
+      { text: "Choose from Gallery", onPress: handlePickPhoto },
+      { text: "Remove Photo", style: "destructive", onPress: async () => {
+        const updated = { ...user, profilePhoto: null };
+        await saveAuth(token, updated);
+        setUser(updated);
+      }},
+      { text: "Cancel", style: "cancel" },
+    ]);
   };
 
   const openEdit = () => {
@@ -91,8 +152,8 @@ export default function StaffProfile() {
     { icon: "grid-outline",           label: "Dashboard",     onPress: () => router.push("/staff/dashboard") },
     { icon: "paw-outline",            label: "Pet Master",    onPress: () => router.push("/staff/petmaster") },
     { icon: "cube-outline",           label: "Inventory",     onPress: () => router.push("/staff/inventory") },
-    { icon: "calendar-outline",       label: "My Bookings",   onPress: () => router.push("/staff/appointments") },
-    { icon: "ribbon-outline",         label: "My Services",   onPress: () => router.push("/staff/myservices") },
+    { icon: "calendar-outline",       label: "All Bookings",   onPress: () => router.push("/staff/appointments") },
+    { icon: "ribbon-outline",         label: "All Services",   onPress: () => router.push("/staff/myservices") },
     { icon: "notifications-outline",  label: "Reminders",     onPress: () => router.push("/staff/reminders") },
     { icon: "exit-outline",           label: "Deboard Pets",  onPress: () => router.push("/staff/deboard") },
     { icon: "lock-closed-outline",    label: "Change Password", onPress: () => setPwModal(true) },
@@ -111,13 +172,23 @@ export default function StaffProfile() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
         {/* Avatar Card */}
         <View style={s.avatarCard}>
-          <TouchableOpacity style={s.avatarWrapper} onPress={openEdit} activeOpacity={0.8}>
-            <View style={s.avatarCircle}>
-              <Text style={s.avatarText}>{getInitials(user?.fullName)}</Text>
-            </View>
-            <View style={s.editBadge}>
-              <Ionicons name="pencil" size={11} color="#0B3D2E" />
-            </View>
+          <TouchableOpacity style={s.avatarWrapper} onPress={handlePhotoOptions} activeOpacity={0.8}>
+            {user?.profilePhoto ? (
+              <Image source={{ uri: user.profilePhoto }} style={s.avatarCircle} />
+            ) : (
+              <View style={s.avatarCircle}>
+                <Text style={s.avatarText}>{getInitials(user?.fullName)}</Text>
+              </View>
+            )}
+            {uploadingPhoto ? (
+              <View style={s.editBadge}>
+                <ActivityIndicator size="small" color="#0B3D2E" />
+              </View>
+            ) : (
+              <View style={s.editBadge}>
+                <Ionicons name="camera" size={11} color="#0B3D2E" />
+              </View>
+            )}
           </TouchableOpacity>
           <Text style={s.userName}>{user?.fullName || "Staff"}</Text>
           <Text style={s.userEmail}>{user?.email || ""}</Text>
@@ -299,6 +370,7 @@ const s = StyleSheet.create({
   avatarCircle: {
     width: 80, height: 80, borderRadius: 40,
     backgroundColor: "#A8D96C", justifyContent: "center", alignItems: "center",
+    overflow: "hidden",
   },
   editBadge: {
     position: "absolute", bottom: 0, right: 0,

@@ -77,14 +77,10 @@ export default function UnblockRequests() {
     <View style={s.container}>
       <View style={s.header}>
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
-          <Ionicons name="arrow-back" size={22} color="#fff" />
+          <Ionicons name="close" size={22} color="#fff" />
         </TouchableOpacity>
-        <View style={{ flex: 1 }}>
-          <Text style={s.headerTitle}>Unblock Requests</Text>
-          {pendingCount > 0 && (
-            <Text style={s.headerSub}>{pendingCount} pending review</Text>
-          )}
-        </View>
+        <Text style={s.headerTitle}>Unblock Requests</Text>
+        <View style={{ width: 36 }} />
       </View>
 
       {/* Filter Tabs */}
@@ -272,10 +268,10 @@ const s = StyleSheet.create({
   header: {
     backgroundColor: "#0B3D2E", paddingHorizontal: 20,
     paddingTop: 52, paddingBottom: 16,
-    flexDirection: "row", alignItems: "center", gap: 12,
+    flexDirection: "row", alignItems: "center",
   },
   backBtn: { width: 36, height: 36, justifyContent: "center" },
-  headerTitle: { fontSize: 18, fontFamily: "Poppins_700Bold", color: "#fff" },
+  headerTitle: { flex: 1, fontSize: 18, fontFamily: "Poppins_700Bold", color: "#fff", textAlign: "center" },
   headerSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#A8D96C", marginTop: 2 },
 
   tabRow: { flexDirection: "row", backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: "#D4EDD4" },

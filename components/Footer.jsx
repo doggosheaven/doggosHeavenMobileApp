@@ -1,6 +1,7 @@
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { useRouter, usePathname } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const tabs = [
   { label: "Home",     icon: "home-outline",     iconActive: "home",     route: "/home" },
@@ -12,9 +13,10 @@ const tabs = [
 export default function Footer() {
   const router   = useRouter();
   const pathname = usePathname();
+  const insets   = useSafeAreaInsets();
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, 10) }]}>
       {tabs.map((tab) => {
         const isActive = pathname === tab.route;
         return (
@@ -45,7 +47,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     backgroundColor: "#0B3D2E",
     paddingTop: 10,
-    paddingBottom: 18,
+    paddingBottom: 10,
     borderTopWidth: 1,
     borderTopColor: "rgba(168,217,108,0.2)",
     elevation: 10,

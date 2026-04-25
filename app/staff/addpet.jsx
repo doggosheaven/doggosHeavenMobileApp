@@ -1,11 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
   TextInput, ActivityIndicator, Alert, Switch, Image, Modal,
+  KeyboardAvoidingView, Platform, Linking,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
+import DatePickerField, { dateToISO } from "../../components/DatePickerField";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
 
@@ -23,7 +25,8 @@ function BreedPickerModal({ visible, onSelect, onClose }) {
   const filtered = BREEDS.filter((b) => b.toLowerCase().includes(search.toLowerCase()));
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={s.breedOverlay}>
+      <KeyboardAvoidingView style={s.breedOverlay} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+        <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
         <View style={s.breedBox}>
           <View style={s.breedHeader}>
             <Text style={s.breedTitle}>Select Breed</Text>
@@ -42,16 +45,16 @@ function BreedPickerModal({ visible, onSelect, onClose }) {
             ))}
           </ScrollView>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
-const emptyVacc = () => ({ name: "", date: "", serialNumber: "", nextDueDate: "" });
+const emptyVacc = () => ({ name: "", date: null, serialNumber: "", nextDueDate: null });
 const emptyPet = () => ({
   name: "", species: "dog", customSpecies: "", breed: "", customBreed: "",
-  sex: "Male", color: "", dob: "", neutered: false,
-  registrationDate: new Date().toLocaleDateString("en-GB"),
+  sex: "Male", color: "", dob: null, neutered: false,
+  registrationDate: new Date(),
   vaccinations: [], photo: null,
 });
 
@@ -124,44 +127,81 @@ export default function StaffAddPet() {
   const [address, setAddress] = useState("");
   const [pets, setPets] = useState([emptyPet()]);
   const [saving, setSaving] = useState(false);
-  const [breedModal, setBreedModal] = useState(null); // petIndex
-  const [photoModal, setPhotoModal] = useState(null); // petIndex
+  const [breedModal, setBreedModal] = useState(null);
+  const [photoModal, setPhotoModal] = useState(null);
+  const [pendingPhoto, setPendingPhoto] = useState(null); // { pi, source }
 
-  const pickPhoto = async (pi, source) => {
-    setPhotoModal(null);
+  // ask permission on mount
+  useEffect(() => {
+    (async () => {
+      await ImagePicker.requestCameraPermissionsAsync();
+      await ImagePicker.requestMediaLibraryPermissionsAsync();
+    })();
+  }, []);
+
+  // pendingPhoto state
+  useEffect(() => {
+    if (!pendingPhoto) return;
+    const { pi, source } = pendingPhoto;
+    setPendingPhoto(null);
+    openPicker(pi, source);
+  }, [pendingPhoto]);
+
+  const openPicker = async (pi, source) => {
     try {
       if (source === "camera") {
-        const { status } = await ImagePicker.requestCameraPermissionsAsync();
-        if (status !== "granted") {
-          Alert.alert("Permission required", "Please allow camera access in Settings.");
-          return;
+        const perm = await ImagePicker.getCameraPermissionsAsync();
+        if (perm.status !== "granted") {
+          const ask = await ImagePicker.requestCameraPermissionsAsync();
+          if (ask.status !== "granted") {
+            Alert.alert(
+              "Camera Permission Required",
+              "Please allow camera access in Settings.",
+              [
+                { text: "Cancel", style: "cancel" },
+                { text: "Open Settings", onPress: () => Linking.openSettings() },
+              ]
+            );
+            return;
+          }
         }
         const result = await ImagePicker.launchCameraAsync({
-          quality: 0.7,
+          allowsEditing: true, aspect: [1, 1], quality: 0.7,
         });
-        if (!result.canceled && result.assets?.length > 0) {
+        if (!result.canceled && result.assets?.length > 0)
           updatePet(pi, "photo", result.assets[0].uri);
-        }
       } else {
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== "granted") {
-          Alert.alert("Permission required", "Please allow photo library access in Settings.");
-          return;
+        const perm = await ImagePicker.getMediaLibraryPermissionsAsync();
+        if (perm.status !== "granted") {
+          const ask = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (ask.status !== "granted") {
+            Alert.alert(
+              "Photo Library Permission Required",
+              "Please allow photo library access in Settings.",
+              [
+                { text: "Cancel", style: "cancel" },
+                { text: "Open Settings", onPress: () => Linking.openSettings() },
+              ]
+            );
+            return;
+          }
         }
         const result = await ImagePicker.launchImageLibraryAsync({
-          allowsEditing: true,
-          aspect: [1, 1],
-          quality: 0.7,
-          mediaTypes: ["images"],
+          allowsEditing: true, aspect: [1, 1], quality: 0.7,
+          mediaTypes: "images",
         });
-        if (!result.canceled && result.assets?.length > 0) {
+        if (!result.canceled && result.assets?.length > 0)
           updatePet(pi, "photo", result.assets[0].uri);
-        }
       }
     } catch (e) {
       console.log("Photo error:", e);
       Alert.alert("Error", "Could not open camera/gallery.");
     }
+  };
+
+  const pickPhoto = (pi, source) => {
+    setPhotoModal(null);
+    setTimeout(() => setPendingPhoto({ pi, source }), 600);
   };
 
   const updatePet = (i, field, val) =>
@@ -191,13 +231,11 @@ export default function StaffAddPet() {
       if (!p.name.trim()) return Alert.alert("Error", "Pet name is required.");
       if (p.species === "other" && !p.customSpecies.trim()) return Alert.alert("Error", "Please enter the species name.");
       if (!p.breed && !p.customBreed) return Alert.alert("Error", "Pet breed is required.");
-      if (!p.dob || !isValidDate(p.dob)) return Alert.alert("Error", "Enter a valid date of birth (DD/MM/YYYY).");
+      if (!p.dob) return Alert.alert("Error", "Date of birth is required.");
     }
     setSaving(true);
     try {
       const { token } = await getAuth();
-
-      // Build FormData to support photo uploads
       const formData = new FormData();
       formData.append("ownerName", ownerName.trim());
       formData.append("phone", phone.trim());
@@ -205,49 +243,55 @@ export default function StaffAddPet() {
       formData.append("address", address.trim());
 
       const petsPayload = pets.map((p) => ({
-        ...p,
-        photo: undefined, // handled separately below
+        name: p.name.trim(),
         species: p.species === "other" ? p.customSpecies.trim() : p.species,
         breed: p.breed === "Other" ? p.customBreed.trim() : p.breed,
-        dob: toISO(p.dob),
-        registrationDate: toISO(p.registrationDate) || p.registrationDate,
+        sex: p.sex,
+        color: p.color.trim(),
+        neutered: p.neutered,
+        dob: p.dob ? dateToISO(p.dob) : "",
+        registrationDate: p.registrationDate ? dateToISO(p.registrationDate) : "",
         vaccinations: p.vaccinations.map((v) => ({
-          ...v,
-          date: toISO(v.date) || v.date,
-          nextDueDate: toISO(v.nextDueDate) || v.nextDueDate,
+          name: v.name,
+          serialNumber: v.serialNumber,
+          date: v.date ? dateToISO(v.date) : "",
+          nextDueDate: v.nextDueDate ? dateToISO(v.nextDueDate) : "",
         })),
       }));
       formData.append("pets", JSON.stringify(petsPayload));
 
-      // Attach photos per pet index
       pets.forEach((p, i) => {
         if (p.photo) {
-          const ext = p.photo.split(".").pop() || "jpg";
+          const uriLower = p.photo.toLowerCase();
+          let mimeType = "image/jpeg";
+          let ext = "jpg";
+          if (uriLower.includes(".png")) { mimeType = "image/png"; ext = "png"; }
+          else if (uriLower.includes(".webp")) { mimeType = "image/webp"; ext = "webp"; }
           formData.append(`photo_${i}`, {
             uri: p.photo,
             name: `pet_${i}.${ext}`,
-            type: `image/${ext === "jpg" ? "jpeg" : ext}`,
+            type: mimeType,
           });
         }
       });
 
       const res = await fetch(`${BASE_URL}/api/v1/pet/addpet`, {
         method: "POST",
-        headers: { Authorization: token || "" }, // NO Content-Type — let fetch set multipart boundary
+        headers: { Authorization: token || "" },
         body: formData,
       });
       const json = await res.json();
       if (json.success) {
-        Alert.alert("✅ Success", "Pet registered successfully!", [
+        Alert.alert("\u2705 Success", "Pet registered successfully!", [
           { text: "OK", onPress: () => router.back() },
         ]);
-      } else Alert.alert("Error", json.message);
-    } catch { Alert.alert("Error", "Network error"); }
+      } else Alert.alert("Error", json.message || "Failed to register.");
+    } catch (e) { console.log(e); Alert.alert("Error", "Network error. Please try again."); }
     finally { setSaving(false); }
   };
 
   return (
-    <View style={s.container}>
+    <KeyboardAvoidingView style={s.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <View style={s.header}>
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
           <Ionicons name="arrow-back" size={22} color="#fff" />
@@ -303,7 +347,7 @@ export default function StaffAddPet() {
                       <Ionicons name="camera" size={28} color="#A8D96C" />
                     </View>
                     <Text style={s.imagePickerText}>Add Pet Photo</Text>
-                    <Text style={s.imagePickerSub}>Camera ya Gallery se add karo</Text>
+                    <Text style={s.imagePickerSub}>Tap to add from Camera or Gallery</Text>
                   </View>
                 )}
               </TouchableOpacity>
@@ -372,30 +416,22 @@ export default function StaffAddPet() {
             </Field>
 
             {/* DOB */}
-            <Field label="Date of Birth * (DD/MM/YYYY)">
-              <TextInput
-                style={s.input}
-                placeholder="e.g. 15/06/2022"
-                placeholderTextColor="#aaa"
-                keyboardType="number-pad"
-                maxLength={10}
-                value={pet.dob}
-                onChangeText={(v) => updatePet(pi, "dob", formatDateInput(v, pet.dob))}
-              />
-            </Field>
+            <DatePickerField
+              label="Date of Birth *"
+              value={pet.dob}
+              onChange={(d) => updatePet(pi, "dob", d)}
+              placeholder="Select date of birth"
+              maxDate={new Date()}
+            />
 
             {/* Reg Date */}
-            <Field label="Registration Date (DD/MM/YYYY)">
-              <TextInput
-                style={s.input}
-                placeholder="e.g. 01/01/2024"
-                placeholderTextColor="#aaa"
-                keyboardType="number-pad"
-                maxLength={10}
-                value={pet.registrationDate}
-                onChangeText={(v) => updatePet(pi, "registrationDate", formatDateInput(v, pet.registrationDate))}
-              />
-            </Field>
+            <DatePickerField
+              label="Registration Date"
+              value={pet.registrationDate}
+              onChange={(d) => updatePet(pi, "registrationDate", d)}
+              placeholder="Select registration date"
+              maxDate={new Date()}
+            />
 
             {/* Neutered */}
             <View style={[s.field, s.switchRow]}>
@@ -427,31 +463,23 @@ export default function StaffAddPet() {
                   <Field label="Vaccine Name *">
                     <Input value={v.name} onChangeText={(val) => updateVacc(pi, vi, "name", val)} placeholder="e.g. Rabies, Parvovirus" />
                   </Field>
-                  <Field label="Date Given (DD/MM/YYYY)">
-                    <TextInput
-                      style={s.input}
-                      placeholder="e.g. 10/03/2024"
-                      placeholderTextColor="#aaa"
-                      keyboardType="number-pad"
-                      maxLength={10}
-                      value={v.date}
-                      onChangeText={(val) => updateVacc(pi, vi, "date", formatDateInput(val, v.date))}
-                    />
-                  </Field>
+                  <DatePickerField
+                    label="Date Given"
+                    value={v.date}
+                    onChange={(d) => updateVacc(pi, vi, "date", d)}
+                    placeholder="Select date given"
+                    maxDate={new Date()}
+                  />
                   <Field label="Serial Number">
                     <Input value={v.serialNumber} onChangeText={(val) => updateVacc(pi, vi, "serialNumber", val)} placeholder="e.g. VAC-2024-001" />
                   </Field>
-                  <Field label="Next Due Date (DD/MM/YYYY)">
-                    <TextInput
-                      style={s.input}
-                      placeholder="e.g. 10/03/2025"
-                      placeholderTextColor="#aaa"
-                      keyboardType="number-pad"
-                      maxLength={10}
-                      value={v.nextDueDate}
-                      onChangeText={(val) => updateVacc(pi, vi, "nextDueDate", formatDateInput(val, v.nextDueDate))}
-                    />
-                  </Field>
+                  <DatePickerField
+                    label="Next Due Date"
+                    value={v.nextDueDate}
+                    onChange={(d) => updateVacc(pi, vi, "nextDueDate", d)}
+                    placeholder="Select next due date"
+                    minDate={new Date()}
+                  />
                 </View>
               ))}
 
@@ -501,7 +529,7 @@ export default function StaffAddPet() {
           </View>
         </TouchableOpacity>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -524,7 +552,7 @@ const s = StyleSheet.create({
   sectionTitle: { fontSize: 15, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 14 },
 
   field: { marginBottom: 14 },
-  switchRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  switchRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between",marginTop: 10 },
   label: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 6 },
   input: {
     borderWidth: 1, borderColor: "#D4EDD4", borderRadius: 10,

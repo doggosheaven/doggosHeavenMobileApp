@@ -70,7 +70,7 @@ export default function AdminBookingRevenue() {
     <View style={s.container}>
       <View style={s.header}>
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
-          <Ionicons name="arrow-back" size={22} color="#fff" />
+          <Ionicons name="close" size={22} color="#fff" />
         </TouchableOpacity>
         <Text style={s.headerTitle}>Booking Revenue</Text>
         <View style={{ width: 36 }} />
@@ -185,10 +185,10 @@ const s = StyleSheet.create({
   header: {
     backgroundColor: "#0B3D2E", paddingHorizontal: 20,
     paddingTop: 52, paddingBottom: 16,
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    flexDirection: "row", alignItems: "center",
   },
   backBtn: { width: 36, height: 36, justifyContent: "center" },
-  headerTitle: { fontSize: 20, fontFamily: "Poppins_700Bold", color: "#fff" },
+  headerTitle: { flex: 1, fontSize: 20, fontFamily: "Poppins_700Bold", color: "#fff", textAlign: "center" },
 
   filterBar: {
     flexDirection: "row", gap: 10, paddingHorizontal: 16, paddingVertical: 12,

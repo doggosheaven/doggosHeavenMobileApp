@@ -2,13 +2,14 @@ import { useState, useCallback } from "react";
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
   Alert, Modal, ActivityIndicator, TextInput, RefreshControl,
+  KeyboardAvoidingView, Platform,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { WebView } from "react-native-webview";
 import { useRouter } from "expo-router";
-import { loadBills, deleteBill } from "../../utils/billHistory";
+import { getAuth } from "../../utils/authStorage";
+import { BASE_URL } from "../../constants/api";
 import { buildWalkInInvoiceHTML, downloadWalkInInvoicePDF } from "../../utils/walkInInvoice";
 
 const PM_COLOR = { Cash: "#3E7B27", Card: "#1565C0", UPI: "#6A1B9A" };
@@ -21,13 +22,32 @@ export default function AdminBillHistory() {
   const router = useRouter();
   const [bills, setBills] = useState([]);
   const [search, setSearch] = useState("");
+  const [pmFilter, setPmFilter] = useState("All");
   const [refreshing, setRefreshing] = useState(false);
   const [viewBill, setViewBill] = useState(null);
+  const [invoiceHtml, setInvoiceHtml] = useState("");
+  const [htmlLoading, setHtmlLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
 
+  const openBill = async (bill) => {
+    setViewBill(bill);
+    setHtmlLoading(true);
+    try {
+      const html = await buildWalkInInvoiceHTML(bill);
+      setInvoiceHtml(html);
+    } catch (e) { console.log(e); setInvoiceHtml("<html><body><p>Error loading invoice</p></body></html>"); }
+    finally { setHtmlLoading(false); }
+  };
+
   const load = useCallback(async () => {
-    const data = await loadBills();
-    setBills(data);
+    try {
+      const { token } = await getAuth();
+      const res = await fetch(`${BASE_URL}/api/v1/bills/list`, {
+        headers: { Authorization: token || "" },
+      });
+      const data = await res.json();
+      if (data.success) setBills(data.bills || []);
+    } catch (e) { console.log(e); }
     setRefreshing(false);
   }, []);
 
@@ -38,8 +58,12 @@ export default function AdminBillHistory() {
       { text: "Cancel", style: "cancel" },
       {
         text: "Delete", style: "destructive", onPress: async () => {
-          await deleteBill(bill.billNo);
-          setBills((prev) => prev.filter((b) => b.billNo !== bill.billNo));
+          const { token } = await getAuth();
+          await fetch(`${BASE_URL}/api/v1/bills/${bill._id}`, {
+            method: "DELETE",
+            headers: { Authorization: token || "" },
+          });
+          setBills((prev) => prev.filter((b) => b._id !== bill._id));
         },
       },
     ]);
@@ -56,24 +80,27 @@ export default function AdminBillHistory() {
     }
   };
 
-  const filtered = bills.filter((b) =>
-    b.customerName?.toLowerCase().includes(search.toLowerCase()) ||
-    b.billNo?.toLowerCase().includes(search.toLowerCase()) ||
-    b.petName?.toLowerCase().includes(search.toLowerCase())
-  );
+  const closeModal = () => { setViewBill(null); setInvoiceHtml(""); };
+
+  const filtered = bills.filter((b) => {
+    const matchSearch =
+      b.customerName?.toLowerCase().includes(search.toLowerCase()) ||
+      b.billNo?.toLowerCase().includes(search.toLowerCase()) ||
+      b.petName?.toLowerCase().includes(search.toLowerCase());
+    const matchPm = pmFilter === "All" || b.paymentMethod === pmFilter;
+    return matchSearch && matchPm;
+  });
 
   const totalRevenue = bills.reduce((sum, b) => sum + (b.total || 0), 0);
 
   return (
-    <View style={s.container}>
+    <KeyboardAvoidingView style={s.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <View style={s.header}>
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
-          <Ionicons name="arrow-back" size={22} color="#fff" />
+          <Ionicons name="close" size={22} color="#fff" />
         </TouchableOpacity>
-        <View style={{ flex: 1 }}>
-          <Text style={s.headerTitle}>Bill History</Text>
-          <Text style={s.headerSub}>{bills.length} walk-in bills</Text>
-        </View>
+        <Text style={s.headerTitle}>Bill History</Text>
+        <View style={{ width: 36 }} />
       </View>
 
       {/* Summary */}
@@ -104,6 +131,20 @@ export default function AdminBillHistory() {
         )}
       </View>
 
+      {/* Payment Filter */}
+      <View style={s.filterRow}>
+        {["All", "Cash", "Card", "Online"].map((f) => (
+          <TouchableOpacity
+            key={f}
+            style={[s.filterChip, pmFilter === f && s.filterChipActive]}
+            onPress={() => setPmFilter(f)}
+            activeOpacity={0.8}
+          >
+            <Text style={[s.filterChipTxt, pmFilter === f && s.filterChipTxtActive]}>{f}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={s.scroll}
@@ -117,7 +158,7 @@ export default function AdminBillHistory() {
           </View>
         ) : (
           filtered.map((bill) => (
-            <TouchableOpacity key={bill.billNo} style={s.card} onPress={() => setViewBill(bill)} activeOpacity={0.85}>
+            <TouchableOpacity key={bill.billNo} style={s.card} onPress={() => openBill(bill)} activeOpacity={0.85}>
               <View style={s.cardTop}>
                 <View style={{ flex: 1 }}>
                   <Text style={s.customerName}>{bill.customerName}</Text>
@@ -150,10 +191,16 @@ export default function AdminBillHistory() {
               </View>
 
               <View style={s.cardActions}>
-                <TouchableOpacity style={s.viewBtn} onPress={() => setViewBill(bill)}>
+                <TouchableOpacity style={s.viewBtn} onPress={() => openBill(bill)}>
                   <Ionicons name="eye-outline" size={14} color="#3E7B27" />
                   <Text style={s.viewBtnTxt}>View</Text>
                 </TouchableOpacity>
+                {bill.paymentMethod !== "Cash" && (
+                  <TouchableOpacity style={s.invoiceBtn} onPress={() => openBill(bill)}>
+                    <Ionicons name="document-text-outline" size={14} color="#1565C0" />
+                    <Text style={s.invoiceBtnTxt}>Invoice</Text>
+                  </TouchableOpacity>
+                )}
                 <TouchableOpacity style={s.deleteBtn} onPress={() => handleDelete(bill)}>
                   <Ionicons name="trash-outline" size={14} color="#C62828" />
                   <Text style={s.deleteBtnTxt}>Delete</Text>
@@ -166,38 +213,45 @@ export default function AdminBillHistory() {
       </ScrollView>
 
       {/* Invoice Preview Modal */}
-      <Modal visible={!!viewBill} animationType="slide" onRequestClose={() => setViewBill(null)}>
-        <SafeAreaView style={s.modalContainer}>
+      <Modal visible={!!viewBill} animationType="slide" onRequestClose={closeModal}>
+        <View style={s.modalContainer}>
           <View style={s.modalHeader}>
-            <TouchableOpacity onPress={() => setViewBill(null)} style={s.modalBack}>
-              <Ionicons name="arrow-back" size={22} color="#fff" />
+            <TouchableOpacity onPress={closeModal} style={s.modalBack}>
+              <Ionicons name="close" size={22} color="#fff" />
             </TouchableOpacity>
             <Text style={s.modalTitle}>Bill Preview</Text>
             <Text style={s.modalSub}>{viewBill?.billNo}</Text>
           </View>
 
-          {viewBill && (
+          {htmlLoading ? (
+            <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+              <ActivityIndicator size="large" color="#0B3D2E" />
+              <Text style={{ marginTop: 12, fontFamily: "Inter_400Regular", color: "#666", fontSize: 13 }}>Loading invoice...</Text>
+            </View>
+          ) : (
             <WebView
               style={{ flex: 1 }}
               originWhitelist={["*"]}
-              source={{ html: buildWalkInInvoiceHTML(viewBill) }}
+              source={{ html: invoiceHtml }}
               showsVerticalScrollIndicator={false}
             />
           )}
 
           <View style={s.modalFooter}>
-            <TouchableOpacity style={s.downloadBtn} onPress={handleDownload} disabled={downloading} activeOpacity={0.85}>
-              {downloading ? <ActivityIndicator color="#A8D96C" /> : (
-                <>
-                  <Ionicons name="download-outline" size={20} color="#A8D96C" />
-                  <Text style={s.downloadBtnTxt}>Download PDF</Text>
-                </>
-              )}
-            </TouchableOpacity>
+            {viewBill?.paymentMethod !== "Cash" && (
+              <TouchableOpacity style={s.downloadBtn} onPress={handleDownload} disabled={downloading} activeOpacity={0.85}>
+                {downloading ? <ActivityIndicator color="#A8D96C" /> : (
+                  <>
+                    <Ionicons name="download-outline" size={20} color="#A8D96C" />
+                    <Text style={s.downloadBtnTxt}>Download PDF</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
           </View>
-        </SafeAreaView>
+        </View>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -206,10 +260,10 @@ const s = StyleSheet.create({
   header: {
     backgroundColor: "#0B3D2E", paddingHorizontal: 20,
     paddingTop: 52, paddingBottom: 16,
-    flexDirection: "row", alignItems: "center", gap: 12,
+    flexDirection: "row", alignItems: "center",
   },
   backBtn: { width: 36, height: 36, justifyContent: "center" },
-  headerTitle: { fontSize: 20, fontFamily: "Poppins_700Bold", color: "#fff" },
+  headerTitle: { flex: 1, fontSize: 20, fontFamily: "Poppins_700Bold", color: "#fff", textAlign: "center" },
   headerSub: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#A8D96C", marginTop: 1 },
 
   summaryRow: { flexDirection: "row", gap: 10, padding: 16, paddingBottom: 0 },
@@ -220,6 +274,19 @@ const s = StyleSheet.create({
   },
   summaryVal: { fontSize: 16, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
   summaryLabel: { fontSize: 10, fontFamily: "Inter_400Regular", color: "#666" },
+
+  filterRow: { flexDirection: "row", gap: 8, paddingHorizontal: 16, paddingBottom: 8, paddingTop: 4 },
+  filterChip: { paddingHorizontal: 16, paddingVertical: 7, borderRadius: 20, backgroundColor: "#fff", borderWidth: 1, borderColor: "#D4EDD4" },
+  filterChipActive: { backgroundColor: "#0B3D2E", borderColor: "#0B3D2E" },
+  filterChipTxt: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+  filterChipTxtActive: { color: "#A8D96C" },
+
+  invoiceBtn: {
+    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 5, paddingVertical: 8, borderRadius: 10,
+    backgroundColor: "#E3F2FD", borderWidth: 1, borderColor: "#BBDEFB",
+  },
+  invoiceBtnTxt: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#1565C0" },
 
   searchBar: {
     flexDirection: "row", alignItems: "center", backgroundColor: "#fff",
@@ -270,10 +337,10 @@ const s = StyleSheet.create({
   modalContainer: { flex: 1, backgroundColor: "#fff" },
   modalHeader: {
     backgroundColor: "#0B3D2E", paddingHorizontal: 20,
-    paddingTop: 16, paddingBottom: 16,
+    paddingTop: 52, paddingBottom: 16,
     flexDirection: "row", alignItems: "center", gap: 12,
   },
-  modalBack: { width: 36, height: 36, justifyContent: "center" },
+  modalBack: { width: 36, height: 44, justifyContent: "center" },
   modalTitle: { fontSize: 18, fontFamily: "Poppins_700Bold", color: "#fff", flex: 1 },
   modalSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#A8D96C" },
   modalFooter: { padding: 16, backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: "#D4EDD4" },

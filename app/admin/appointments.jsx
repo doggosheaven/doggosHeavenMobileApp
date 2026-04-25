@@ -1,12 +1,13 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
-  View, Text, ScrollView, FlatList, StyleSheet, TouchableOpacity,
-  ActivityIndicator, RefreshControl, Alert, Modal, TextInput,
+  View, Text, ScrollView, StyleSheet, TouchableOpacity,
+  ActivityIndicator, RefreshControl, Alert, Modal, TextInput, FlatList,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { WebView } from "react-native-webview";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
 import { buildInvoiceHTML, downloadInvoicePDF } from "../../utils/invoiceGenerator";
@@ -15,13 +16,94 @@ const FILTERS = ["All", "Pending", "Confirmed", "Completed", "Cancelled"];
 const STATUS_COLOR = { pending: "#F59E0B", confirmed: "#3E7B27", completed: "#0B3D2E", cancelled: "#C62828" };
 const STATUS_BG    = { pending: "#FFF9E6", confirmed: "#E8F5E8", completed: "#E8F5E8", cancelled: "#FFEBEE" };
 
+const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const DAY_NAMES   = ["Su","Mo","Tu","We","Th","Fr","Sa"];
+
+function CalendarModal({ visible, selectedDate, onSelect, onClose }) {
+  const [calMonth, setCalMonth] = useState(selectedDate || new Date());
+  const year  = calMonth.getFullYear();
+  const month = calMonth.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstDay    = new Date(year, month, 1).getDay();
+  const isSameDay   = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
+  const calDays     = [...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <TouchableOpacity style={cal.overlay} activeOpacity={1} onPress={onClose}>
+        <TouchableOpacity activeOpacity={1} style={cal.box}>
+          <View style={cal.header}>
+            <TouchableOpacity onPress={() => setCalMonth(new Date(year, month-1, 1))} hitSlop={{top:8,bottom:8,left:8,right:8}}>
+              <Ionicons name="chevron-back" size={20} color="#0B3D2E" />
+            </TouchableOpacity>
+            <Text style={cal.monthTxt}>{MONTH_NAMES[month]} {year}</Text>
+            <TouchableOpacity onPress={() => setCalMonth(new Date(year, month+1, 1))} hitSlop={{top:8,bottom:8,left:8,right:8}}>
+              <Ionicons name="chevron-forward" size={20} color="#0B3D2E" />
+            </TouchableOpacity>
+          </View>
+          <View style={cal.dayRow}>
+            {DAY_NAMES.map(d => <Text key={d} style={cal.dayName}>{d}</Text>)}
+          </View>
+          <FlatList
+            data={calDays} numColumns={7} keyExtractor={(_,i)=>String(i)} scrollEnabled={false}
+            renderItem={({item:day}) => {
+              if (!day) return <View style={cal.dayEmpty}/>;
+              const thisDate = new Date(year, month, day);
+              const isSel    = selectedDate && isSameDay(thisDate, selectedDate);
+              const isToday  = isSameDay(thisDate, new Date());
+              return (
+                <TouchableOpacity style={[cal.day, isSel && cal.daySelected, isToday && !isSel && cal.dayToday]} onPress={()=>{onSelect(thisDate);onClose();}} activeOpacity={0.7}>
+                  <Text style={[cal.dayTxt, isSel && cal.dayTxtSelected, isToday && !isSel && cal.dayTxtToday]}>{day}</Text>
+                </TouchableOpacity>
+              );
+            }}
+          />
+          <TouchableOpacity style={cal.todayBtn} onPress={()=>{onSelect(new Date());onClose();}} activeOpacity={0.8}>
+            <Text style={cal.todayBtnTxt}>Go to Today</Text>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+  );
+}
+
+const cal = StyleSheet.create({
+  overlay: {flex:1,backgroundColor:"rgba(0,0,0,0.45)",justifyContent:"center",alignItems:"center"},
+  box: {backgroundColor:"#fff",borderRadius:20,padding:20,width:"88%",elevation:10},
+  header: {flexDirection:"row",justifyContent:"space-between",alignItems:"center",marginBottom:14},
+  monthTxt: {fontSize:16,fontFamily:"Poppins_700Bold",color:"#0B3D2E"},
+  dayRow: {flexDirection:"row",marginBottom:6},
+  dayName: {flex:1,textAlign:"center",fontSize:11,fontFamily:"Poppins_700Bold",color:"#3E7B27"},
+  day: {flex:1,aspectRatio:1,justifyContent:"center",alignItems:"center",borderRadius:8,margin:1},
+  dayEmpty: {flex:1,aspectRatio:1,margin:1},
+  daySelected: {backgroundColor:"#0B3D2E"},
+  dayToday: {backgroundColor:"#E8F5E8",borderWidth:1.5,borderColor:"#3E7B27"},
+  dayTxt: {fontSize:13,fontFamily:"Inter_400Regular",color:"#1A1A1A"},
+  dayTxtSelected: {fontFamily:"Poppins_700Bold",color:"#A8D96C"},
+  dayTxtToday: {fontFamily:"Poppins_700Bold",color:"#0B3D2E"},
+  todayBtn: {backgroundColor:"#0B3D2E",borderRadius:12,paddingVertical:12,alignItems:"center",marginTop:14},
+  todayBtnTxt: {fontSize:14,fontFamily:"Poppins_700Bold",color:"#A8D96C"},
+});
+
+let _cachedAppts = null;
+let _cachedApptToken = "";
+
 export default function AdminAppointments() {
-  const [appointments, setAppointments] = useState([]);
-  const [filter, setFilter] = useState("All");
-  const [loading, setLoading] = useState(true);
+  const { filter: paramFilter } = useLocalSearchParams();
+  const router = useRouter();
+  const [appointments, setAppointments] = useState(_cachedAppts || []);
+  const [filter, setFilter] = useState(paramFilter || "All");
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [showCal, setShowCal] = useState(false);
+  const [loading, setLoading] = useState(!_cachedAppts);
   const [refreshing, setRefreshing] = useState(false);
   const [actionId, setActionId] = useState(null);
-  const [token, setToken] = useState("");
+  const [token, setToken] = useState(_cachedApptToken);
+
+  
+  useEffect(() => {
+    if (paramFilter) setFilter(paramFilter);
+    else setFilter("All");
+  }, [paramFilter]);
 
   const [invoiceAppt, setInvoiceAppt] = useState(null);
   const [invoiceHTML, setInvoiceHTML] = useState("");
@@ -35,6 +117,7 @@ export default function AdminAppointments() {
   const [confirmAmount, setConfirmAmount] = useState("");
   const [confirmAmountAppt, setConfirmAmountAppt] = useState(null);
   const [confirmAmountLoading, setConfirmAmountLoading] = useState(false);
+  const [detailAppt, setDetailAppt] = useState(null);
 
   const openInvoice = async (appt) => {
     setInvoiceHTML("");
@@ -43,15 +126,16 @@ export default function AdminAppointments() {
     setInvoiceHTML(html);
   };
 
-  const loadAppointments = useCallback(async () => {
+  const loadAppointments = useCallback(async (force = false) => {
+    if (!force && _cachedAppts) { setAppointments(_cachedAppts); setLoading(false); return; }
     try {
       const { token: t } = await getAuth();
-      setToken(t || "");
+      setToken(t || ""); _cachedApptToken = t || "";
       const res = await fetch(`${BASE_URL}/api/v1/customerappointment/getallappoint`, {
         headers: { Authorization: t || "" },
       });
       const data = await res.json();
-      if (data.success) setAppointments(data.data || []);
+      if (data.success) { setAppointments(data.data || []); _cachedAppts = data.data || []; }
     } catch (e) { console.log(e); }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
@@ -61,8 +145,9 @@ export default function AdminAppointments() {
   const handleConfirm = async (id) => {
     setActionId(id);
     try {
+      const t = token || (await getAuth()).token || "";
       const res = await fetch(`${BASE_URL}/api/v1/customerappointment/confirmappoint/${id}`, {
-        method: "PATCH", headers: { Authorization: token },
+        method: "PATCH", headers: { Authorization: t },
       });
       const data = await res.json();
       if (data.success) {
@@ -76,9 +161,10 @@ export default function AdminAppointments() {
   const handleUpdateStatus = async (id, status, extraBody = {}) => {
     setActionId(id);
     try {
+      const t = token || (await getAuth()).token || "";
       const res = await fetch(`${BASE_URL}/api/v1/customerappointment/updateappoint/${id}/status`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", Authorization: token },
+        headers: { "Content-Type": "application/json", Authorization: t },
         body: JSON.stringify({ status, ...extraBody }),
       });
       const data = await res.json();
@@ -134,30 +220,95 @@ export default function AdminAppointments() {
     }
   };
 
-  const filtered = filter === "All" ? appointments : appointments.filter(a => a.status === filter.toLowerCase());
+  const [showFilterModal, setShowFilterModal] = useState(false);
+  const isSameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
+  const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "";
+  const isToday = selectedDate && isSameDay(selectedDate, new Date());
+
+  const filtered = appointments.filter(a => {
+    const statusMatch = filter === "All" || a.status === filter.toLowerCase();
+    const dateMatch   = !selectedDate || isSameDay(new Date(a.appointmentDate), selectedDate);
+    return statusMatch && dateMatch;
+  });
   const formatDate = (d) => new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.8}>
+          <Ionicons name="close" size={22} color="#fff" />
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>All Bookings</Text>
-        <Text style={styles.headerCount}>{appointments.length} total</Text>
+        <View style={styles.headerRight}>
+          <Text style={styles.headerCount}>{filtered.length} / {appointments.length}</Text>
+          <TouchableOpacity
+            style={[styles.filterIconBtn, filter !== "All" && styles.filterIconBtnActive]}
+            onPress={() => setShowFilterModal(true)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="options-outline" size={20} color={filter !== "All" ? "#0B3D2E" : "#A8D96C"} />
+            {filter !== "All" && <View style={styles.filterDot} />}
+          </TouchableOpacity>
+        </View>
       </View>
 
-      <View style={styles.filterWrapper}>
-        <FlatList
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          data={FILTERS}
-          keyExtractor={(f) => f}
-          contentContainerStyle={styles.filterContent}
-          renderItem={({ item: f }) => (
-            <TouchableOpacity style={[styles.filterChip, filter === f && styles.filterChipActive]} onPress={() => setFilter(f)}>
-              <Text style={[styles.filterText, filter === f && styles.filterTextActive]}>{f}</Text>
+      {/* Date Picker Bar */}
+      <View style={styles.dateBar}>
+        <TouchableOpacity style={styles.datePickerBtn} onPress={() => setShowCal(true)} activeOpacity={0.8}>
+          <Ionicons name="calendar-outline" size={15} color="#0B3D2E" />
+          <Text style={styles.datePickerTxt}>
+            {selectedDate ? (isToday ? "Today" : fmtDate(selectedDate)) : "All Dates"}
+          </Text>
+          {selectedDate ? (
+            <TouchableOpacity onPress={() => setSelectedDate(null)} hitSlop={{top:8,bottom:8,left:8,right:8}}>
+              <Ionicons name="close-circle" size={15} color="#C62828" />
             </TouchableOpacity>
+          ) : (
+            <Ionicons name="chevron-down" size={15} color="#999" />
           )}
-        />
+        </TouchableOpacity>
+        {filter !== "All" && (
+          <View style={[styles.activeFilterBadge, { backgroundColor: STATUS_BG[filter.toLowerCase()] }]}>
+            <Text style={[styles.activeFilterBadgeTxt, { color: STATUS_COLOR[filter.toLowerCase()] }]}>{filter}</Text>
+            <TouchableOpacity onPress={() => setFilter("All")} hitSlop={{top:6,bottom:6,left:6,right:6}}>
+              <Ionicons name="close" size={12} color={STATUS_COLOR[filter.toLowerCase()]} />
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
+
+      <CalendarModal
+        visible={showCal}
+        selectedDate={selectedDate}
+        onSelect={(d) => setSelectedDate(d)}
+        onClose={() => setShowCal(false)}
+      />
+
+      {/* Filter Bottom Sheet */}
+      <Modal visible={showFilterModal} transparent animationType="slide" onRequestClose={() => setShowFilterModal(false)}>
+        <TouchableOpacity style={styles.filterOverlay} activeOpacity={1} onPress={() => setShowFilterModal(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.filterSheet}>
+            <View style={styles.filterHandle} />
+            <Text style={styles.filterSheetTitle}>Filter Bookings</Text>
+            {FILTERS.map((f) => (
+              <TouchableOpacity
+                key={f}
+                style={[styles.filterOption, filter === f && styles.filterOptionActive]}
+                onPress={() => { setFilter(f); setShowFilterModal(false); }}
+                activeOpacity={0.8}
+              >
+                <Ionicons
+                  name={f === "All" ? "apps-outline" : f === "Pending" ? "time-outline" : f === "Confirmed" ? "checkmark-circle-outline" : f === "Completed" ? "ribbon-outline" : "close-circle-outline"}
+                  size={20}
+                  color={filter === f ? "#A8D96C" : "#0B3D2E"}
+                />
+                <Text style={[styles.filterOptionTxt, filter === f && styles.filterOptionTxtActive]}>{f}</Text>
+                {filter === f && <Ionicons name="checkmark" size={18} color="#A8D96C" style={{ marginLeft: "auto" }} />}
+              </TouchableOpacity>
+            ))}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
 
       {loading ? (
         <ActivityIndicator size="large" color="#0B3D2E" style={{ flex: 1 }} />
@@ -165,7 +316,7 @@ export default function AdminAppointments() {
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scroll}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadAppointments(); }} tintColor="#0B3D2E" />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadAppointments(true); }} tintColor="#0B3D2E" />}
         >
           {filtered.length === 0 ? (
             <View style={styles.emptyBox}>
@@ -174,7 +325,7 @@ export default function AdminAppointments() {
             </View>
           ) : (
             filtered.map((appt) => (
-              <View key={appt._id} style={styles.card}>
+              <TouchableOpacity key={appt._id} style={styles.card} onPress={() => setDetailAppt(appt)} activeOpacity={0.85}>
                 <View style={styles.cardHeader}>
                   <View style={styles.cardHeaderLeft}>
                     <Text style={styles.serviceName}>{appt.serviceName}</Text>
@@ -218,7 +369,20 @@ export default function AdminAppointments() {
                   <ActivityIndicator size="small" color="#0B3D2E" style={{ marginTop: 10 }} />
                 ) : (
                   <View style={styles.actionRow}>
-                    {appt.status === "pending" && (
+                    {/* Online paid + pending → auto confirm & complete */}
+                    {appt.paymentStatus === "paid" && appt.paymentMode === "online" && appt.status !== "completed" && appt.status !== "cancelled" && (
+                      <TouchableOpacity style={styles.completeBtn} onPress={() =>
+                        Alert.alert("Mark Complete", "Payment already received online. Mark as completed?", [
+                          { text: "Cancel", style: "cancel" },
+                          { text: "Complete", onPress: () => handleUpdateStatus(appt._id, "completed") },
+                        ])
+                      } activeOpacity={0.8}>
+                        <Ionicons name="ribbon-outline" size={16} color="#fff" />
+                        <Text style={styles.confirmBtnText}>Mark Complete</Text>
+                      </TouchableOpacity>
+                    )}
+                    {/* Normal pending — not online paid */}
+                    {appt.status === "pending" && !(appt.paymentStatus === "paid" && appt.paymentMode === "online") && (
                       <TouchableOpacity style={styles.confirmBtn} onPress={() => {
                         if (appt.totalAmount === 0 || appt.totalAmount === null || appt.totalAmount === undefined) {
                           setConfirmAmountAppt(appt);
@@ -232,13 +396,15 @@ export default function AdminAppointments() {
                         <Text style={styles.confirmBtnText}>Confirm</Text>
                       </TouchableOpacity>
                     )}
-                    {appt.status === "confirmed" && (
+                    {/* Confirmed but not online paid → Mark Complete */}
+                    {appt.status === "confirmed" && !(appt.paymentStatus === "paid" && appt.paymentMode === "online") && (
                       <TouchableOpacity style={styles.completeBtn} onPress={() => openCompleteModal(appt)} activeOpacity={0.8}>
                         <Ionicons name="ribbon-outline" size={16} color="#fff" />
                         <Text style={styles.confirmBtnText}>Mark Complete</Text>
                       </TouchableOpacity>
                     )}
-                    {(appt.status === "pending" || appt.status === "confirmed") && (
+                    {/* Cancel — only if not online paid */}
+                    {(appt.status === "pending" || appt.status === "confirmed") && !(appt.paymentStatus === "paid" && appt.paymentMode === "online") && (
                       <TouchableOpacity
                         style={styles.cancelBtn}
                         onPress={() => Alert.alert("Cancel Booking", "Are you sure?", [
@@ -288,7 +454,7 @@ export default function AdminAppointments() {
                     <Text style={styles.invoiceBtnText}>View Invoice</Text>
                   </TouchableOpacity>
                 )}
-              </View>
+              </TouchableOpacity>
             ))
           )}
         </ScrollView>
@@ -314,16 +480,6 @@ export default function AdminAppointments() {
                 </Text>
               </View>
             )}
-
-            <Text style={styles.payLabel}>Amount (₹)</Text>
-            <TextInput
-              style={styles.payInput}
-              value={payAmount}
-              onChangeText={setPayAmount}
-              keyboardType="numeric"
-              placeholder="Enter amount"
-              placeholderTextColor="#aaa"
-            />
 
             <Text style={styles.payLabel}>Amount (₹)</Text>
             <TextInput
@@ -438,17 +594,93 @@ export default function AdminAppointments() {
         </View>
       </Modal>
 
+      {/* ── Booking Detail Modal ── */}
+      <Modal visible={!!detailAppt} animationType="slide" onRequestClose={() => setDetailAppt(null)}>
+        <SafeAreaView style={styles.modalContainer} edges={["top"]}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={() => setDetailAppt(null)} style={styles.modalClose}>
+              <Ionicons name="close" size={22} color="#fff" />
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Booking Detail</Text>
+            <View style={[styles.statusBadge, { backgroundColor: STATUS_BG[detailAppt?.status] }]}>
+              <Text style={[styles.statusText, { color: STATUS_COLOR[detailAppt?.status] }]}>{detailAppt?.status}</Text>
+            </View>
+          </View>
+
+          {detailAppt && (
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 16, paddingBottom: 40, backgroundColor: "#F0F7F0" }}>
+
+              {/* Service Info */}
+              <View style={styles.detailSection}>
+                <Text style={styles.detailSectionTitle}>Service Info</Text>
+                <DetailRow icon="construct-outline" label="Service" value={detailAppt.serviceName} />
+                <DetailRow icon="calendar-outline" label="Date" value={formatDate(detailAppt.appointmentDate)} />
+                <DetailRow icon="time-outline" label="Time" value={detailAppt.appointmentTime} />
+                {detailAppt.notes ? <DetailRow icon="document-text-outline" label="Notes" value={detailAppt.notes} last /> : null}
+              </View>
+
+              {/* Pet Info */}
+              <View style={styles.detailSection}>
+                <Text style={styles.detailSectionTitle}>Pet Info</Text>
+                <DetailRow icon="paw-outline" label="Pet Name" value={detailAppt.petName} />
+                <DetailRow icon="color-palette-outline" label="Breed" value={detailAppt.petBreed || "—"} />
+                <DetailRow icon="calendar-outline" label="Age" value={detailAppt.petAge || "—"} last />
+              </View>
+
+              {/* Customer Info */}
+              <View style={styles.detailSection}>
+                <Text style={styles.detailSectionTitle}>Customer Info</Text>
+                <DetailRow icon="person-outline" label="Name" value={detailAppt.customerId?.fullName || detailAppt.customerId?.name || "—"} />
+                <DetailRow icon="mail-outline" label="Email" value={detailAppt.customerId?.email || "—"} />
+                <DetailRow icon="call-outline" label="Phone" value={detailAppt.customerId?.phone || "—"} last />
+              </View>
+
+              {/* Payment Info */}
+              <View style={styles.detailSection}>
+                <Text style={styles.detailSectionTitle}>Payment Info</Text>
+                <DetailRow icon="cash-outline" label="Amount" value={detailAppt.totalAmount > 0 ? `₹${detailAppt.totalAmount}` : "Price on Request"} />
+                {detailAppt.gstAmount > 0 && <DetailRow icon="receipt-outline" label="GST" value={`₹${detailAppt.gstAmount}`} />}
+                <DetailRow icon="card-outline" label="Payment Mode" value={detailAppt.paymentMode || "—"} />
+                <DetailRow icon="checkmark-circle-outline" label="Payment Status" value={detailAppt.paymentStatus} />
+                {detailAppt.ambulanceRequired && (
+                  <DetailRow icon="car-outline" label="Pickup & Drop" value={`${detailAppt.ambulanceKm} km • ₹${detailAppt.ambulanceFare}`} />
+                )}
+                <DetailRow icon="time-outline" label="Booked At" value={detailAppt.bookedAt ? new Date(detailAppt.bookedAt).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"} last />
+              </View>
+
+              {/* Booking ID */}
+              <View style={styles.detailSection}>
+                <Text style={styles.detailSectionTitle}>Booking Reference</Text>
+                <DetailRow icon="barcode-outline" label="Booking ID" value={`DH-${detailAppt._id.slice(-8).toUpperCase()}`} last />
+              </View>
+
+              {/* Invoice Button */}
+              {(detailAppt.status === "completed" || detailAppt.paymentStatus === "paid") && (
+                <TouchableOpacity
+                  style={[styles.invoiceBtn, { marginTop: 8 }]}
+                  onPress={() => { setDetailAppt(null); setTimeout(() => openInvoice(detailAppt), 300); }}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="document-text-outline" size={16} color="#3E7B27" />
+                  <Text style={styles.invoiceBtnText}>View Invoice</Text>
+                </TouchableOpacity>
+              )}
+            </ScrollView>
+          )}
+        </SafeAreaView>
+      </Modal>
+
       {/* ── Invoice Modal ── */}
       <Modal
         visible={!!invoiceAppt}
         animationType="slide"
         onRequestClose={() => setInvoiceAppt(null)}
       >
-        <SafeAreaView style={styles.modalContainer}>
+        <SafeAreaView style={styles.modalContainer} edges={["top"]}>
           {/* Modal Header */}
           <View style={styles.modalHeader}>
             <TouchableOpacity onPress={() => setInvoiceAppt(null)} style={styles.modalClose}>
-              <Ionicons name="arrow-back" size={22} color="#fff" />
+              <Ionicons name="close" size={22} color="#fff" />
             </TouchableOpacity>
             <Text style={styles.modalTitle}>Invoice</Text>
             <Text style={styles.modalSub}>
@@ -458,19 +690,21 @@ export default function AdminAppointments() {
 
           {invoiceAppt && (
             invoiceHTML ? (
-              <WebView
-                style={{ flex: 1 }}
-                originWhitelist={["*"]}
-                source={{ html: invoiceHTML }}
-                showsVerticalScrollIndicator={false}
-              />
+              <View style={{ flex: 1, backgroundColor: "#fff" }}>
+                <WebView
+                  style={{ flex: 1 }}
+                  originWhitelist={["*"]}
+                  source={{ html: invoiceHTML }}
+                  showsVerticalScrollIndicator={false}
+                />
+              </View>
             ) : (
               <ActivityIndicator size="large" color="#0B3D2E" style={{ flex: 1 }} />
             )
           )}
 
           {/* Download Button */}
-          <View style={styles.modalFooter}>
+          <View style={[styles.modalFooter, { backgroundColor: "#fff" }]}>
             <TouchableOpacity
               style={styles.downloadBtn}
               onPress={handleDownload}
@@ -498,23 +732,40 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: "#0B3D2E", paddingHorizontal: 20,
     paddingTop: 52, paddingBottom: 16,
-    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+    flexDirection: "row", alignItems: "center",
   },
-  headerTitle: { fontSize: 20, fontFamily: "Poppins_700Bold", color: "#fff" },
+  backBtn: { width: 36, height: 36, justifyContent: "center" },
+  headerTitle: { flex: 1, fontSize: 20, fontFamily: "Poppins_700Bold", color: "#fff", textAlign: "center" },
+  headerRight: { flexDirection: "row", alignItems: "center", gap: 10 },
   headerCount: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#A8D96C" },
+  filterIconBtn: { position: "relative", padding: 8, backgroundColor: "rgba(168,217,108,0.15)", borderRadius: 12 },
+  filterIconBtnActive: { backgroundColor: "#A8D96C" },
+  filterDot: { position: "absolute", top: 5, right: 5, width: 7, height: 7, borderRadius: 4, backgroundColor: "#F59E0B", borderWidth: 1, borderColor: "#0B3D2E" },
 
-  filterWrapper: {
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#D4EDD4",
-    height: 56,
-    justifyContent: "center",
+  dateBar: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    backgroundColor: "#fff", paddingHorizontal: 16, paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: "#D4EDD4",
   },
-  filterContent: { paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
-  filterChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, backgroundColor: "#F0F7F0", borderWidth: 1, borderColor: "#D4EDD4" },
-  filterChipActive: { backgroundColor: "#0B3D2E", borderColor: "#0B3D2E" },
-  filterText: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#3E7B27" },
-  filterTextActive: { color: "#fff", fontFamily: "Poppins_700Bold" },
+  datePickerBtn: {
+    flex: 1, flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: "#F0F7F0", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9,
+    borderWidth: 1, borderColor: "#D4EDD4",
+  },
+  datePickerTxt: { flex: 1, fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+  activeFilterBadge: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20,
+  },
+  activeFilterBadgeTxt: { fontSize: 12, fontFamily: "Poppins_700Bold" },
+  filterOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" },
+  filterSheet: { backgroundColor: "#fff", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 36 },
+  filterHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: "#D4EDD4", alignSelf: "center", marginBottom: 16 },
+  filterSheetTitle: { fontSize: 16, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 14 },
+  filterOption: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 13, paddingHorizontal: 14, borderRadius: 12, marginBottom: 6, backgroundColor: "#F0F7F0" },
+  filterOptionActive: { backgroundColor: "#0B3D2E" },
+  filterOptionTxt: { fontSize: 14, fontFamily: "Inter_400Regular", color: "#0B3D2E", flex: 1 },
+  filterOptionTxtActive: { color: "#fff", fontFamily: "Poppins_700Bold" },
 
   scroll: { padding: 16, paddingBottom: 40 },
 
@@ -582,6 +833,27 @@ const styles = StyleSheet.create({
   payConfirmBtnTxt: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
   confirmAmountHint: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#888", marginTop: 6, lineHeight: 16 },
 
+  // Detail Modal
+  detailSection: {
+    backgroundColor: "#fff", borderRadius: 16, paddingHorizontal: 14,
+    marginBottom: 14, elevation: 2, borderWidth: 1, borderColor: "#D4EDD4",
+  },
+  detailSectionTitle: {
+    fontSize: 12, fontFamily: "Poppins_700Bold", color: "#3E7B27",
+    paddingTop: 12, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: "#F0F7F0",
+    marginBottom: 4,
+  },
+  detailRowItem: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: "#F0F7F0",
+  },
+  detailRowIconBox: {
+    width: 30, height: 30, borderRadius: 8,
+    backgroundColor: "#E8F5E8", justifyContent: "center", alignItems: "center",
+  },
+  detailRowLabel: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#666", flex: 1 },
+  detailRowValue: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#0B3D2E", flex: 2, textAlign: "right" },
+
   invoiceBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
     marginTop: 10, paddingVertical: 9, borderRadius: 10,
@@ -593,10 +865,10 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 16, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginTop: 12 },
 
   // Modal
-  modalContainer: { flex: 1, backgroundColor: "#fff" },
+  modalContainer: { flex: 1, backgroundColor: "#0B3D2E" },
   modalHeader: {
     backgroundColor: "#0B3D2E", paddingHorizontal: 20,
-    paddingTop: 16, paddingBottom: 16,
+    paddingTop: 52, paddingBottom: 16,
     flexDirection: "row", alignItems: "center", gap: 12,
   },
   modalClose: { width: 36, height: 36, justifyContent: "center" },
@@ -614,3 +886,15 @@ const styles = StyleSheet.create({
   },
   downloadBtnText: { fontSize: 15, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
 });
+
+function DetailRow({ icon, label, value, last }) {
+  return (
+    <View style={[styles.detailRowItem, last && { borderBottomWidth: 0 }]}>
+      <View style={styles.detailRowIconBox}>
+        <Ionicons name={icon} size={15} color="#3E7B27" />
+      </View>
+      <Text style={styles.detailRowLabel}>{label}</Text>
+      <Text style={styles.detailRowValue} numberOfLines={2}>{value || "—"}</Text>
+    </View>
+  );
+}

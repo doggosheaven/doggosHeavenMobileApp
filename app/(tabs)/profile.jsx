@@ -7,44 +7,18 @@ import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import Header from "../../components/Header";
-import { getAuth, clearAuth } from "../../utils/authStorage";
-import { BASE_URL } from "../../constants/api";
+import { clearAuth } from "../../utils/authStorage";
+import { useApp } from "../../context/AppContext";
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const [user, setUser] = useState(null);
-  const [pets, setPets] = useState([]);
-  const [petsLoading, setPetsLoading] = useState(false);
   const [showComingSoon, setShowComingSoon] = useState(false);
+  const { user, pets, loadAuth, loadPets, resetCache } = useApp();
 
-  const loadProfile = useCallback(async () => {
-    const { user: u, token } = await getAuth();
-    setUser(u);
-    if (u?.email) fetchPets(u.email, token);
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      loadProfile();
-    }, [loadProfile])
-  );
-
-  const fetchPets = async (email, token) => {
-    setPetsLoading(true);
-    try {
-      const encodedEmail = encodeURIComponent(email);
-      const res = await fetch(
-        `${BASE_URL}/api/v1/customerappointment/getcustomerpets?email=${encodedEmail}`,
-        { headers: { Authorization: token || "" } }
-      );
-      const data = await res.json();
-      if (data.success) setPets(data.pets || []);
-    } catch (e) {
-      console.log(e);
-    } finally {
-      setPetsLoading(false);
-    }
-  };
+  useFocusEffect(useCallback(() => {
+    loadAuth();
+    loadPets();
+  }, []));
 
   const handleLogout = () => {
     Alert.alert("Logout", "Are you sure you want to logout?", [
@@ -53,6 +27,7 @@ export default function ProfileScreen() {
         text: "Logout", style: "destructive",
         onPress: async () => {
           await clearAuth();
+          resetCache();
           router.replace("/auth/login");
         },
       },
@@ -75,6 +50,7 @@ export default function ProfileScreen() {
   };
 
   const menuItems = [
+    { icon: "document-text-outline", label: "My Prescriptions", onPress: () => router.push("/screens/myprescriptions"), iconColor: "#3E7B27" },
     { icon: "paw-outline", label: "My Pets", onPress: () => router.push("/screens/mypets"), iconColor: "#3E7B27" },
     { icon: "wallet-outline", label: "My Wallet", onPress: () => router.push("/screens/walletscreen"), iconColor: "#3E7B27" },
     { icon: "home-outline", label: "15-Day Boarding Plan", onPress: () => router.push("/screens/boardingsubscription"), iconColor: "#3E7B27" },
@@ -97,8 +73,8 @@ export default function ProfileScreen() {
         {/* Avatar Card */}
         <View style={styles.avatarCard}>
           <TouchableOpacity style={styles.avatarWrapper} onPress={() => router.push("/screens/editprofile")} activeOpacity={0.8}>
-            {user?.profileImage ? (
-              <Image source={{ uri: user.profileImage }} style={styles.avatarImage} />
+            {user?.profilePhoto || user?.profileImage ? (
+              <Image source={{ uri: user.profilePhoto || user.profileImage }} style={styles.avatarImage} />
             ) : (
               <View style={styles.avatarCircle}>
                 <Text style={styles.avatarText}>{getInitials(user?.fullName)}</Text>
@@ -126,9 +102,7 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </View>
 
-          {petsLoading ? (
-            <ActivityIndicator size="small" color="#0B3D2E" style={{ marginVertical: 16 }} />
-          ) : pets.length === 0 ? (
+          {pets.length === 0 ? (
             <TouchableOpacity style={styles.emptyPets} onPress={() => router.push("/(tabs)/Pet/PetForm")}>
             <Ionicons name="hand-left-outline" size={32} color="#3E7B27" />
               <Text style={styles.emptyPetsText}>No pets registered yet</Text>

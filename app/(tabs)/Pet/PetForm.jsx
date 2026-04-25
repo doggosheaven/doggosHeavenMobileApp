@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  TextInput, Alert, ActivityIndicator, Modal, Image,
+  TextInput, Alert, ActivityIndicator, Modal, Image, KeyboardAvoidingView, Platform,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
@@ -9,6 +9,7 @@ import { useRouter } from "expo-router";
 import Header from "../../../components/Header";
 import { getAuth } from "../../../utils/authStorage";
 import { BASE_URL } from "../../../constants/api";
+import DatePickerField, { dateToISO } from "../../../components/DatePickerField";
 
 const DOG_BREEDS = [
   "Labrador Retriever", "German Shepherd", "Golden Retriever", "Shih Tzu",
@@ -25,10 +26,10 @@ const today = () => new Date().toISOString().split("T")[0];
 
 const emptyPet = () => ({
   name: "", species: "dog", customSpecies: "", breed: "", sex: "Male",
-  color: "", dob: "", dob_d: "", dob_m: "", dob_y: "", neutered: false, vaccinations: [], image: null,
+  color: "", dob: null, neutered: false, vaccinations: [], image: null,
 });
 
-const emptyVac = () => ({ name: "", date: "", serialNumber: "", nextDueDate: "" });
+const emptyVac = () => ({ name: "", date: null, serialNumber: "", nextDueDate: null });
 
 // Auto-format DD/MM/YYYY
 const formatDateInput = (val, prev) => {
@@ -140,8 +141,30 @@ function PhotoSourceModal({ visible, onCamera, onGallery, onClose }) {
 function PetCard({ pet, index, onUpdate, onRemove, showRemove }) {
   const [breedModal, setBreedModal] = useState(false);
   const [photoModal, setPhotoModal] = useState(false);
+  const [pendingSource, setPendingSource] = useState(null);
 
   const set = (key, val) => onUpdate(index, key, val);
+
+  // open picker after modal close to avoid permission issues on Android
+  useEffect(() => {
+    if (!pendingSource) return;
+    const source = pendingSource;
+    setPendingSource(null);
+    const open = async () => {
+      if (source === "camera") {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== "granted") { Alert.alert("Permission needed", "Please allow camera access."); return; }
+        const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.7 });
+        if (!result.canceled) set("image", result.assets[0].uri);
+      } else {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== "granted") { Alert.alert("Permission needed", "Please allow photo library access."); return; }
+        const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsEditing: true, aspect: [1, 1], quality: 0.7 });
+        if (!result.canceled) set("image", result.assets[0].uri);
+      }
+    };
+    setTimeout(open, 600);
+  }, [pendingSource]);
 
   const addVaccination = () => set("vaccinations", [...pet.vaccinations, emptyVac()]);
   const removeVaccination = (i) => set("vaccinations", pet.vaccinations.filter((_, idx) => idx !== i));
@@ -191,20 +214,8 @@ function PetCard({ pet, index, onUpdate, onRemove, showRemove }) {
       <PhotoSourceModal
         visible={photoModal}
         onClose={() => setPhotoModal(false)}
-        onCamera={async () => {
-          setPhotoModal(false);
-          const { status } = await ImagePicker.requestCameraPermissionsAsync();
-          if (status !== "granted") { Alert.alert("Permission needed", "Please allow camera access."); return; }
-          const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.7 });
-          if (!result.canceled) set("image", result.assets[0].uri);
-        }}
-        onGallery={async () => {
-          setPhotoModal(false);
-          const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-          if (status !== "granted") { Alert.alert("Permission needed", "Please allow photo library access."); return; }
-          const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsEditing: true, aspect: [1, 1], quality: 0.7 });
-          if (!result.canceled) set("image", result.assets[0].uri);
-        }}
+        onCamera={() => { setPhotoModal(false); setPendingSource("camera"); }}
+        onGallery={() => { setPhotoModal(false); setPendingSource("gallery"); }}
       />
 
       <Label text="Pet Name" required />
@@ -244,58 +255,12 @@ function PetCard({ pet, index, onUpdate, onRemove, showRemove }) {
       <InputBox icon="color-palette-outline" placeholder="e.g. Golden, Black & White" value={pet.color} onChangeText={(v) => set("color", v)} />
 
       <Label text="Date of Birth" required />
-      <View style={styles.dobRow}>
-        <View style={[styles.inputBox, styles.dobField]}>
-          <TextInput
-            style={styles.input}
-            placeholder="DD"
-            placeholderTextColor="#aaa"
-            value={pet.dob_d || ""}
-            onChangeText={(v) => {
-              if (v.length <= 2) {
-                set("dob_d", v);
-                const mm = pet.dob_m || ""; const yyyy = pet.dob_y || "";
-                if (v.length === 2 && mm.length === 2 && yyyy.length === 4) set("dob", `${yyyy}-${mm}-${v}`);
-              }
-            }}
-            keyboardType="numeric" maxLength={2}
-          />
-        </View>
-        <Text style={styles.dobSep}>/</Text>
-        <View style={[styles.inputBox, styles.dobField]}>
-          <TextInput
-            style={styles.input}
-            placeholder="MM"
-            placeholderTextColor="#aaa"
-            value={pet.dob_m || ""}
-            onChangeText={(v) => {
-              if (v.length <= 2) {
-                set("dob_m", v);
-                const dd = pet.dob_d || ""; const yyyy = pet.dob_y || "";
-                if (dd.length === 2 && v.length === 2 && yyyy.length === 4) set("dob", `${yyyy}-${v}-${dd}`);
-              }
-            }}
-            keyboardType="numeric" maxLength={2}
-          />
-        </View>
-        <Text style={styles.dobSep}>/</Text>
-        <View style={[styles.inputBox, { flex: 2 }]}>
-          <TextInput
-            style={styles.input}
-            placeholder="YYYY"
-            placeholderTextColor="#aaa"
-            value={pet.dob_y || ""}
-            onChangeText={(v) => {
-              if (v.length <= 4) {
-                set("dob_y", v);
-                const dd = pet.dob_d || ""; const mm = pet.dob_m || "";
-                if (dd.length === 2 && mm.length === 2 && v.length === 4) set("dob", `${v}-${mm}-${dd}`);
-              }
-            }}
-            keyboardType="numeric" maxLength={4}
-          />
-        </View>
-      </View>
+      <DatePickerField
+        value={pet.dob}
+        onChange={(d) => set("dob", d)}
+        placeholder="Select date of birth"
+        maxDate={new Date()}
+      />
 
       <TouchableOpacity style={styles.checkRow} onPress={() => set("neutered", !pet.neutered)} activeOpacity={0.8}>
         <View style={[styles.checkbox, pet.neutered && styles.checkboxChecked]}>
@@ -328,19 +293,13 @@ function PetCard({ pet, index, onUpdate, onRemove, showRemove }) {
               />
             </View>
 
-            <Text style={styles.vacLabel}>Date Given (DD/MM/YYYY)</Text>
-            <View style={[styles.inputBox, { marginBottom: 8 }]}>
-              <Ionicons name="calendar-outline" size={16} color="#3E7B27" style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="DD/MM/YYYY"
-                placeholderTextColor="#aaa"
-                value={v.date}
-                onChangeText={(val) => updateVaccination(i, "date", formatDateInput(val, v.date))}
-                keyboardType="numeric"
-                maxLength={10}
-              />
-            </View>
+            <Text style={styles.vacLabel}>Date Given</Text>
+            <DatePickerField
+              value={v.date}
+              onChange={(d) => updateVaccination(i, "date", d)}
+              placeholder="Select date given"
+              maxDate={new Date()}
+            />
 
             <Text style={styles.vacLabel}>Serial Number</Text>
             <View style={[styles.inputBox, { marginBottom: 8 }]}>
@@ -354,19 +313,13 @@ function PetCard({ pet, index, onUpdate, onRemove, showRemove }) {
               />
             </View>
 
-            <Text style={styles.vacLabel}>Next Due Date (DD/MM/YYYY)</Text>
-            <View style={[styles.inputBox, { marginBottom: 0 }]}>
-              <Ionicons name="calendar" size={16} color="#E67E22" style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="DD/MM/YYYY"
-                placeholderTextColor="#aaa"
-                value={v.nextDueDate}
-                onChangeText={(val) => updateVaccination(i, "nextDueDate", formatDateInput(val, v.nextDueDate))}
-                keyboardType="numeric"
-                maxLength={10}
-              />
-            </View>
+            <Text style={styles.vacLabel}>Next Due Date</Text>
+            <DatePickerField
+              value={v.nextDueDate}
+              onChange={(d) => updateVaccination(i, "nextDueDate", d)}
+              placeholder="Select next due date"
+              minDate={new Date()}
+            />
           </View>
         ))}
         <TouchableOpacity style={styles.addVacBtn} onPress={addVaccination} activeOpacity={0.8}>
@@ -391,8 +344,7 @@ export default function PetForm() {
     for (let i = 0; i < pets.length; i++) {
       const p = pets[i];
       if (!p.name.trim()) return Alert.alert("Error", `Pet #${i + 1}: Name is required.`);
-      if (!p.dob.trim()) return Alert.alert("Error", `Pet #${i + 1}: Date of birth is required.`);
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(p.dob)) return Alert.alert("Error", `Pet #${i + 1}: DOB must be YYYY-MM-DD format.`);
+      if (!p.dob) return Alert.alert("Error", `Pet #${i + 1}: Date of birth is required.`);
     }
 
     setLoading(true);
@@ -406,11 +358,21 @@ export default function PetForm() {
           formData.append("breed", pet.breed || "");
           formData.append("sex", pet.sex);
           formData.append("color", pet.color || "");
-          formData.append("dob", pet.dob);
+          formData.append("dob", dateToISO(pet.dob));
           formData.append("neutered", String(pet.neutered));
-          formData.append("vaccinations", JSON.stringify(pet.vaccinations));
+          formData.append("vaccinations", JSON.stringify(pet.vaccinations.map(v => ({
+            name: v.name,
+            serialNumber: v.serialNumber,
+            date: v.date ? dateToISO(v.date) : "",
+            nextDueDate: v.nextDueDate ? dateToISO(v.nextDueDate) : "",
+          }))));
           formData.append("registrationDate", today());
-          if (pet.image) formData.append("image", { uri: pet.image, name: "pet.jpg", type: "image/jpeg" });
+          if (pet.image) {
+            const uriLower = pet.image.toLowerCase();
+            let mimeType = "image/jpeg"; let ext = "jpg";
+            if (uriLower.includes(".png")) { mimeType = "image/png"; ext = "png"; }
+            formData.append("image", { uri: pet.image, name: `pet.${ext}`, type: mimeType });
+          }
           return fetch(`${BASE_URL}/api/v1/customer/pet/register`, {
             method: "POST",
             headers: { Authorization: token || "" },
@@ -435,7 +397,7 @@ export default function PetForm() {
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <Header title="Add Pet" showBack />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
@@ -480,14 +442,14 @@ export default function PetForm() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F0F7F0" },
-  scroll: { padding: 16 },
+  scroll: { padding: 16, paddingBottom: 100 },
 
   hero: {
     backgroundColor: "#0B3D2E", borderRadius: 20, padding: 20,

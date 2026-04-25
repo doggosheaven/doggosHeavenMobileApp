@@ -17,6 +17,7 @@ const TYPE_CONFIG = {
   cancelled:        { icon: "close-circle",      color: "#C62828" },
   pending:          { icon: "time",              color: "#F59E0B" },
   visit:            { icon: "paw",               color: "#1A5C3A" },
+  prescription:     { icon: "medical",           color: "#7B2D8B" },
   blacklist:        { icon: "ban",               color: "#C62828" },
   unblocked:        { icon: "checkmark-circle",  color: "#3E7B27" },
   unblock_rejected: { icon: "close-circle",      color: "#C62828" },
@@ -199,7 +200,7 @@ export default function NotificationsScreen() {
               notif.type === "confirmed" &&
               notif.paymentStatus !== "paid";
 
-            // Case 2: Staff ne custom amount set karke confirm kiya (source=visit, purpose=confirmed)
+            // Case 2: set custom amount by staff (source=visit, purpose=confirmed)
             const isVisitConfirmed = notif.source === "visit" &&
               notif.purpose === "confirmed" &&
               !!notif.appointmentId;
@@ -215,7 +216,9 @@ export default function NotificationsScreen() {
                 style={[styles.card, !read && styles.cardUnread]}
                 onPress={() => {
                   markRead(notif.id);
-                  if (notif.source === "visit" && notif.visitId) {
+                  if (notif.purpose === "prescription") {
+                    router.push("/screens/myprescriptions");
+                  } else if (notif.source === "visit" && notif.visitId) {
                     router.push({
                       pathname: "/screens/visitdetail",
                       params: { visitId: notif.visitId, purpose: notif.purpose, petName: notif.petName },
@@ -267,6 +270,12 @@ export default function NotificationsScreen() {
                     <View style={styles.viewDetailHint}>
                       <Ionicons name="eye-outline" size={13} color="#1A5C3A" />
                       <Text style={styles.viewDetailHintTxt}>Tap to view visit details</Text>
+                    </View>
+                  )}
+                  {notif.purpose === "prescription" && (
+                    <View style={styles.viewDetailHint}>
+                      <Ionicons name="medical-outline" size={13} color="#7B2D8B" />
+                      <Text style={[styles.viewDetailHintTxt, { color: "#7B2D8B" }]}>Tap to view prescriptions</Text>
                     </View>
                   )}
                 </View>

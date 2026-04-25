@@ -1,8 +1,9 @@
 import { useState } from "react";
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  TextInput, Alert, ActivityIndicator, Modal,
+  TextInput, Alert, ActivityIndicator, Modal, Image, KeyboardAvoidingView, Platform,
 } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import Header from "../../components/Header";
@@ -116,6 +117,7 @@ export default function EditPetScreen() {
   const [form, setForm] = useState({
     name: petData.name || "",
     species: petData.species || "dog",
+    customSpecies: ["dog"].includes(petData.species) ? "" : (petData.species || ""),
     breed: petData.breed || "",
     sex: petData.sex || "Male",
     color: petData.color || "",
@@ -132,8 +134,27 @@ export default function EditPetScreen() {
     })),
   });
 
+  const [image, setImage] = useState(petData.image || null);
   const [loading, setLoading] = useState(false);
   const [breedModal, setBreedModal] = useState(false);
+  const [photoModal, setPhotoModal] = useState(false);
+
+  const pickPhoto = async (source) => {
+    setPhotoModal(false);
+    try {
+      if (source === "camera") {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== "granted") return Alert.alert("Permission needed", "Please allow camera access.");
+        const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.7 });
+        if (!result.canceled) setImage(result.assets[0].uri);
+      } else {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== "granted") return Alert.alert("Permission needed", "Please allow photo library access.");
+        const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsEditing: true, aspect: [1, 1], quality: 0.7 });
+        if (!result.canceled) setImage(result.assets[0].uri);
+      }
+    } catch { Alert.alert("Error", "Could not open camera/gallery."); }
+  };
 
   const set = (key, val) => setForm((prev) => ({ ...prev, [key]: val }));
 
@@ -169,6 +190,9 @@ export default function EditPetScreen() {
 
       const formData = new FormData();
       Object.entries(body).forEach(([k, v]) => formData.append(k, v));
+      if (image && image.startsWith("file")) {
+        formData.append("image", { uri: image, name: "pet.jpg", type: "image/jpeg" });
+      }
 
       const res = await fetch(`${BASE_URL}/api/v1/customer/pet/update/${petData._id}`, {
         method: "PUT",
@@ -192,9 +216,30 @@ export default function EditPetScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <Header title="Edit Pet" showBack />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+
+        {/* Photo */}
+        <Label text="Pet Photo" />
+        <TouchableOpacity style={styles.imagePicker} onPress={() => setPhotoModal(true)} activeOpacity={0.8}>
+          {image ? (
+            <>
+              <Image source={{ uri: image }} style={styles.petImage} />
+              <TouchableOpacity style={styles.removeImageBtn} onPress={() => setImage(null)}>
+                <Ionicons name="close-circle" size={22} color="#C62828" />
+              </TouchableOpacity>
+            </>
+          ) : (
+            <View style={styles.imagePickerInner}>
+              <View style={styles.imageIconBox}>
+                <Ionicons name="camera" size={28} color="#A8D96C" />
+              </View>
+              <Text style={styles.imagePickerText}>Add Pet Photo</Text>
+              <Text style={styles.imagePickerSub}>Camera ya Gallery se add karo</Text>
+            </View>
+          )}
+        </TouchableOpacity>
 
         <Label text="Pet Name *" />
         <InputBox icon="paw-outline" placeholder="Pet's name" value={form.name} onChangeText={(v) => set("name", v)} />
@@ -205,6 +250,9 @@ export default function EditPetScreen() {
           value={form.species}
           onChange={(v) => set("species", v)}
         />
+        {form.species === "other" && (
+          <InputBox icon="paw-outline" placeholder="Enter species (e.g. Cat, Rabbit...)" value={form.customSpecies || ""} onChangeText={(v) => set("customSpecies", v)} />
+        )}
 
         <Label text="Breed" />
         <TouchableOpacity style={styles.selectBox} onPress={() => setBreedModal(true)} activeOpacity={0.8}>
@@ -334,6 +382,26 @@ export default function EditPetScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Photo Source Modal */}
+        <Modal visible={photoModal} transparent animationType="fade" onRequestClose={() => setPhotoModal(false)}>
+          <TouchableOpacity style={modal.overlay} activeOpacity={1} onPress={() => setPhotoModal(false)}>
+            <View style={modal.photoBox}>
+              <Text style={modal.photoTitle}>Pet Photo</Text>
+              <TouchableOpacity style={modal.photoBtn} onPress={() => pickPhoto("camera")} activeOpacity={0.8}>
+                <Ionicons name="camera-outline" size={22} color="#0B3D2E" />
+                <Text style={modal.photoBtnText}>Take Photo</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={modal.photoBtn} onPress={() => pickPhoto("gallery")} activeOpacity={0.8}>
+                <Ionicons name="image-outline" size={22} color="#0B3D2E" />
+                <Text style={modal.photoBtnText}>Choose from Gallery</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={modal.photoCancel} onPress={() => setPhotoModal(false)}>
+                <Text style={modal.photoCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+
         <TouchableOpacity style={styles.saveBtn} onPress={handleSave} activeOpacity={0.85} disabled={loading}>
           {loading ? (
             <ActivityIndicator size="small" color="#A8D96C" />
@@ -347,13 +415,13 @@ export default function EditPetScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F0F7F0" },
-  scroll: { padding: 16 },
+  scroll: { padding: 16, paddingBottom: 100 },
 
   label: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 6, marginTop: 12 },
   inputBox: {
@@ -373,6 +441,22 @@ const styles = StyleSheet.create({
   },
   selectValue: { flex: 1, fontSize: 14, fontFamily: "Inter_400Regular", color: "#1A1A1A" },
   selectPlaceholder: { flex: 1, fontSize: 14, fontFamily: "Inter_400Regular", color: "#aaa" },
+
+  imagePicker: {
+    borderRadius: 14, borderWidth: 1.5, borderColor: "#D4EDD4",
+    borderStyle: "dashed", overflow: "hidden", marginBottom: 2,
+    backgroundColor: "#F8FFF8", minHeight: 130,
+    justifyContent: "center", alignItems: "center",
+  },
+  imagePickerInner: { alignItems: "center", paddingVertical: 24 },
+  imageIconBox: {
+    width: 56, height: 56, borderRadius: 28,
+    backgroundColor: "#0B3D2E", justifyContent: "center", alignItems: "center", marginBottom: 10,
+  },
+  imagePickerText: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 4 },
+  imagePickerSub: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#999" },
+  petImage: { width: "100%", height: 180, borderRadius: 12 },
+  removeImageBtn: { position: "absolute", top: 8, right: 8 },
 
   toggleRow: { flexDirection: "row", gap: 10, marginBottom: 2 },
   toggleBtn: {
@@ -449,4 +533,10 @@ const modal = StyleSheet.create({
   searchInput: { flex: 1, fontSize: 14, fontFamily: "Inter_400Regular", color: "#1A1A1A" },
   item: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F0F7F0" },
   itemText: { fontSize: 14, fontFamily: "Inter_400Regular", color: "#1A1A1A" },
+  photoBox: { backgroundColor: "#fff", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 36 },
+  photoTitle: { fontSize: 16, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 16, textAlign: "center" },
+  photoBtn: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#F0F7F0", borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: "#D4EDD4" },
+  photoBtnText: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+  photoCancel: { alignItems: "center", marginTop: 6, padding: 12 },
+  photoCancelText: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#C62828" },
 });

@@ -1,13 +1,91 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
   TextInput, ActivityIndicator, Modal, Alert, FlatList,
+  KeyboardAvoidingView, Platform,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { getAuth } from "../../utils/authStorage";
+import DatePickerField, { dateToISO } from "../../components/DatePickerField";
 import { BASE_URL } from "../../constants/api";
+
+const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const DAY_NAMES   = ["Su","Mo","Tu","We","Th","Fr","Sa"];
+
+function CalendarModal({ visible, selectedDate, onSelect, onClose, token }) {
+  const [calMonth, setCalMonth] = useState(selectedDate || new Date());
+  const year  = calMonth.getFullYear();
+  const month = calMonth.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstDay    = new Date(year, month, 1).getDay();
+  const isSameDay   = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
+  const calDays     = [...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <TouchableOpacity style={cs.overlay} activeOpacity={1} onPress={onClose}>
+        <TouchableOpacity activeOpacity={1} style={cs.box}>
+          <View style={cs.header}>
+            <TouchableOpacity onPress={() => setCalMonth(new Date(year, month - 1, 1))} hitSlop={{top:8,bottom:8,left:8,right:8}}>
+              <Ionicons name="chevron-back" size={20} color="#0B3D2E" />
+            </TouchableOpacity>
+            <Text style={cs.monthTxt}>{MONTH_NAMES[month]} {year}</Text>
+            <TouchableOpacity onPress={() => setCalMonth(new Date(year, month + 1, 1))} hitSlop={{top:8,bottom:8,left:8,right:8}}>
+              <Ionicons name="chevron-forward" size={20} color="#0B3D2E" />
+            </TouchableOpacity>
+          </View>
+          <View style={cs.dayRow}>
+            {DAY_NAMES.map(d => <Text key={d} style={cs.dayName}>{d}</Text>)}
+          </View>
+          <FlatList
+            data={calDays}
+            numColumns={7}
+            keyExtractor={(_, i) => String(i)}
+            scrollEnabled={false}
+            renderItem={({ item: day }) => {
+              if (!day) return <View style={cs.dayEmpty} />;
+              const thisDate   = new Date(year, month, day);
+              const isSelected = selectedDate && isSameDay(thisDate, selectedDate);
+              const isToday    = isSameDay(thisDate, new Date());
+              return (
+                <TouchableOpacity
+                  style={[cs.day, isSelected && cs.daySelected, isToday && !isSelected && cs.dayToday]}
+                  onPress={() => { onSelect(thisDate); onClose(); }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[cs.dayTxt, isSelected && cs.dayTxtSelected, isToday && !isSelected && cs.dayTxtToday]}>{day}</Text>
+                </TouchableOpacity>
+              );
+            }}
+          />
+          <TouchableOpacity style={cs.todayBtn} onPress={() => { onSelect(new Date()); onClose(); }} activeOpacity={0.8}>
+            <Text style={cs.todayBtnTxt}>Go to Today</Text>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+  );
+}
+
+const cs = StyleSheet.create({
+  overlay: { flex:1, backgroundColor:"rgba(0,0,0,0.45)", justifyContent:"center", alignItems:"center" },
+  box: { backgroundColor:"#fff", borderRadius:20, padding:20, width:"88%", elevation:10 },
+  header: { flexDirection:"row", justifyContent:"space-between", alignItems:"center", marginBottom:14 },
+  monthTxt: { fontSize:16, fontFamily:"Poppins_700Bold", color:"#0B3D2E" },
+  dayRow: { flexDirection:"row", marginBottom:6 },
+  dayName: { flex:1, textAlign:"center", fontSize:11, fontFamily:"Poppins_700Bold", color:"#3E7B27" },
+  day: { flex:1, aspectRatio:1, justifyContent:"center", alignItems:"center", borderRadius:8, margin:1 },
+  dayEmpty: { flex:1, aspectRatio:1, margin:1 },
+  daySelected: { backgroundColor:"#0B3D2E" },
+  dayToday: { backgroundColor:"#E8F5E8", borderWidth:1.5, borderColor:"#3E7B27" },
+  dayTxt: { fontSize:13, fontFamily:"Inter_400Regular", color:"#1A1A1A" },
+  dayTxtSelected: { fontFamily:"Poppins_700Bold", color:"#A8D96C" },
+  dayTxtToday: { fontFamily:"Poppins_700Bold", color:"#0B3D2E" },
+  todayBtn: { backgroundColor:"#0B3D2E", borderRadius:12, paddingVertical:12, alignItems:"center", marginTop:14 },
+  todayBtnTxt: { fontSize:14, fontFamily:"Poppins_700Bold", color:"#A8D96C" },
+});
 
 const PURPOSES = [
   "Inquiry", "Dog Park", "Veterinary", "Hostel",
@@ -23,9 +101,10 @@ export default function TotalVisits() {
   const [refreshing, setRefreshing] = useState(false);
 
   // Filters
-  const [dateFilter, setDateFilter] = useState(new Date().toISOString().split("T")[0]);
-  const [nameFilter, setNameFilter] = useState("");
-  const [purposeFilter, setPurposeFilter] = useState("");
+  const [selectedDate, setSelectedDate] = useState(null); // default all visits
+  const [showCal, setShowCal] = useState(false);
+  const fmtSelectedDate = selectedDate ? selectedDate.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "All Dates";
+  const isToday = selectedDate && new Date().toDateString() === selectedDate.toDateString();
 
   // Add Visit Modal
   const [showModal, setShowModal] = useState(false);
@@ -47,10 +126,11 @@ export default function TotalVisits() {
 
   // Visit form fields
   const [price, setPrice] = useState("");
-  const [discount, setDiscount] = useState("0");
+  const [discount, setDiscount] = useState("");
+  const [paymentMode, setPaymentMode] = useState("cash");
   const [customerType, setCustomerType] = useState("pvtltd");
   const [note, setNote] = useState("");
-  const [followUpDate, setFollowUpDate] = useState("");
+  const [followUpDate, setFollowUpDate] = useState(null);
   const [followUpTime, setFollowUpTime] = useState("");
   const [followUpPurpose, setFollowUpPurpose] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -61,12 +141,10 @@ export default function TotalVisits() {
     return t || "";
   };
 
-  const fetchVisits = useCallback(async (t) => {
+  const fetchVisits = async (t, date) => {
     try {
       const params = new URLSearchParams();
-      if (nameFilter) params.append("name", nameFilter);
-      if (purposeFilter) params.append("purpose", purposeFilter);
-      if (dateFilter) params.append("date", dateFilter);
+      if (date) params.append("date", date.toISOString().split("T")[0]);
       const res = await fetch(`${BASE_URL}/api/v1/visit/getvisitlist?${params}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: t },
@@ -76,7 +154,7 @@ export default function TotalVisits() {
       else setVisits([]);
     } catch (e) { console.log(e); setVisits([]); }
     finally { setLoading(false); setRefreshing(false); }
-  }, [nameFilter, purposeFilter, dateFilter]);
+  };
 
   const fetchVisitTypes = async (t) => {
     try {
@@ -92,8 +170,16 @@ export default function TotalVisits() {
   };
 
   useFocusEffect(useCallback(() => {
-    loadToken().then((t) => fetchVisits(t));
-  }, [fetchVisits]));
+    loadToken().then((t) => {
+      fetchVisits(t, selectedDate);
+      fetchVisitTypes(t);
+    });
+  }, []));
+
+  // Auto-fetch when date changes
+  useEffect(() => {
+    if (token) fetchVisits(token, selectedDate);
+  }, [selectedDate, token]);
 
   // Fetch all pets for selector
   const fetchAllPets = async (t) => {
@@ -116,21 +202,36 @@ export default function TotalVisits() {
       )
     : allPets;
 
+  const openPetSelector = () => {
+    setShowModal(false);
+    setTimeout(() => setShowPetSelector(true), 300);
+  };
+
+  const onPetSelected = (pet) => {
+    setSelectedPet(pet);
+    setPetSearch("");
+    setShowPetSelector(false);
+    setTimeout(() => setShowModal(true), 300);
+  };
+
   const openModal = async () => {
     const t = token || (await loadToken());
-    await Promise.all([fetchVisitTypes(t), fetchAllPets(t)]);
-    setShowModal(true);
     resetForm();
+    setShowModal(true);
+    // load in background
+    fetchVisitTypes(t);
+    fetchAllPets(t);
   };
 
   const resetForm = () => {
     setSelectedPet(null);
     setPetSearch("");
     setPrice("");
-    setDiscount("0");
+    setDiscount("");
+    setPaymentMode("cash");
     setCustomerType("pvtltd");
     setNote("");
-    setFollowUpDate("");
+    setFollowUpDate(null);
     setFollowUpTime("");
     setFollowUpPurpose("");
   };
@@ -142,16 +243,18 @@ export default function TotalVisits() {
 
   const getEndpointForPurpose = (purpose) => {
     const map = {
-      "Inquiry": "addinquiryvisit",
-      "Dog Park": "adddogparkvisit",
-      "Veterinary": "addveterinaryvisit",
-      "Hostel": "addhostelvisit",
-      "Day Care": "adddaycarevisit",
-      "Day School": "adddayschoolvisit",
-      "Play School": "addplayschoolvisit",
-      "Grooming": "addgroomingvisit",
-      "Shop": "addshopvisit",
-      "Buy Subscription": "addinquiryvisit",
+      "Inquiry":         "addinquiryvisit",
+      "Dog Park":        "adddogparkvisit",
+      "Veterinary":      "addveterinaryvisit",
+      "Hostel":          "addhostelvisit",
+      "Day Care":        "adddaycarevisit",
+      "Day School":      "adddayschoolvisit",
+      "Play School":     "addplayschoolvisit",
+      "Grooming":        "addgroomingvisit",
+      "Shop":            "addshoppingvisit",
+      "Buy Subscription":"addinquiryvisit",
+      "Boarding":        "addhostelvisit",
+      "Wallet Boarding": "addhostelvisit",
     };
     return map[purpose] || "addinquiryvisit";
   };
@@ -171,9 +274,11 @@ export default function TotalVisits() {
   const handleSubmit = async () => {
     if (!selectedPet) { Alert.alert("Error", "Please select a pet"); return; }
     const vtId = getVisitTypeId();
-    if (!vtId) { Alert.alert("Error", "Visit type not found"); return; }
+    if (!vtId) { Alert.alert("Error", "Visit type not found. Please wait for types to load."); return; }
 
-    const parsedFollowUp = followUpDate ? parseFollowUpDate(followUpDate) : null;
+    const parsedFollowUp = followUpDate ? dateToISO(followUpDate) : null;
+    // Add note for Inquiry visit 
+    const finalNote = note.trim() || `${selectedPurpose} visit`;
 
     setSubmitting(true);
     try {
@@ -183,18 +288,20 @@ export default function TotalVisits() {
         petId: selectedPet._id,
         visitType: vtId,
         customerType,
-        note,
+        note: finalNote,
         details: {
           price: Number(price) || 0,
           discount: Number(discount) || 0,
           finalPrice: Math.max(0, (Number(price) || 0) - (Number(discount) || 0)),
-          note,
-          selectedPayment: "cash",
+          note: finalNote,
+          selectedPayment: paymentMode,
+          isSubscriptionAvailed: false,
+          numberOfDays: 1,
         },
         ...(parsedFollowUp && {
           nextFollowUp: parsedFollowUp,
-          followUpTime,
-          followUpPurpose,
+          followUpTime: followUpTime || "00:00",
+          followUpPurpose: followUpPurpose || finalNote,
         }),
       };
 
@@ -205,10 +312,10 @@ export default function TotalVisits() {
       });
       const json = await res.json();
       if (json.success) {
-        Alert.alert("✅ Success", "Visit recorded successfully!");
+        Alert.alert("\u2705 Success", "Visit recorded successfully!");
         setShowModal(false);
         resetForm();
-        fetchVisits(t);
+        fetchVisits(t, selectedDate);
       } else {
         Alert.alert("Error", json.message || "Failed to save visit");
       }
@@ -222,11 +329,11 @@ export default function TotalVisits() {
   const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "";
 
   return (
-    <View style={s.container}>
+    <KeyboardAvoidingView style={s.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       {/* Header */}
       <View style={s.header}>
-        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace("/staff/dashboard")} style={s.backBtn}>
-          <Ionicons name="arrow-back" size={22} color="#fff" />
+        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace("/admin/dashboard")} style={s.backBtn}>
+          <Ionicons name="close" size={22} color="#fff" />
         </TouchableOpacity>
         <Text style={s.headerTitle}>Total Visits</Text>
         <TouchableOpacity style={s.addBtn} onPress={openModal} activeOpacity={0.8}>
@@ -235,29 +342,52 @@ export default function TotalVisits() {
         </TouchableOpacity>
       </View>
 
-      {/* Filters */}
+      {/* Filters — sirf date picker */}
       <View style={s.filterBox}>
-        <TextInput
-          style={s.filterInput}
-          placeholder="🐾 Pet name / phone"
-          placeholderTextColor="#999"
-          value={nameFilter}
-          onChangeText={setNameFilter}
-          onSubmitEditing={() => loadToken().then(fetchVisits)}
-        />
-        <TextInput
-          style={s.filterInput}
-          placeholder="📅 Date (YYYY-MM-DD)"
-          placeholderTextColor="#999"
-          value={dateFilter}
-          onChangeText={setDateFilter}
-          onSubmitEditing={() => loadToken().then(fetchVisits)}
-        />
-        <TouchableOpacity style={s.searchBtn} onPress={() => loadToken().then(fetchVisits)}>
-          <Ionicons name="search" size={18} color="#fff" />
-          <Text style={s.searchBtnTxt}>Search</Text>
-        </TouchableOpacity>
+        <View style={s.dateRow}>
+          <TouchableOpacity style={s.navBtn} onPress={() => {
+            const d = new Date(selectedDate || new Date());
+            d.setDate(d.getDate() - 1);
+            setSelectedDate(d);
+          }} activeOpacity={0.8}>
+            <Ionicons name="chevron-back" size={18} color="#0B3D2E" />
+          </TouchableOpacity>
+          <TouchableOpacity style={s.dateBtn} onPress={() => setShowCal(true)} activeOpacity={0.8}>
+            <Ionicons name="calendar-outline" size={16} color="#0B3D2E" />
+            <Text style={s.dateBtnTxt}>
+              {selectedDate ? (isToday ? "Today" : fmtSelectedDate) : "All Dates"}
+            </Text>
+            {selectedDate && (
+              <TouchableOpacity onPress={() => setSelectedDate(null)} hitSlop={{top:8,bottom:8,left:8,right:8}}>
+                <Ionicons name="close-circle" size={16} color="#C62828" />
+              </TouchableOpacity>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity style={s.navBtn} onPress={() => {
+            const d = new Date(selectedDate || new Date());
+            d.setDate(d.getDate() + 1);
+            setSelectedDate(d);
+          }} activeOpacity={0.8}>
+            <Ionicons name="chevron-forward" size={18} color="#0B3D2E" />
+          </TouchableOpacity>
+        </View>
       </View>
+
+      <CalendarModal
+        visible={showCal}
+        selectedDate={selectedDate}
+        onSelect={(d) => { setSelectedDate(d); setShowCal(false); }}
+        onClose={() => setShowCal(false)}
+        token={token}
+      />
+
+      {/* Total Visit Count Banner */}
+      {!loading && (
+        <View style={s.countBanner}>
+          <Ionicons name="paw" size={16} color="#3E7B27" />
+          <Text style={s.countBannerTxt}>Total Visits: <Text style={s.countBannerNum}>{visits.length}</Text></Text>
+        </View>
+      )}
 
       {/* Visit List */}
       {loading ? (
@@ -287,7 +417,7 @@ export default function TotalVisits() {
               <Text style={s.visitOwner}>👤 {item?.pet?.owner?.name || "N/A"}  📞 {item?.pet?.owner?.phone || "N/A"}</Text>
               <View style={s.visitCardFooter}>
                 <Text style={s.visitDate}>📅 {fmtDate(item?.createdAt)}</Text>
-                <Text style={s.visitPrice}>₹{item?.details?.price || 0}</Text>
+                <Text style={s.visitPrice}>₹{item?.details?.finalPrice ?? item?.details?.price ?? 0}</Text>
               </View>
               <View style={s.previewHint}>
                 <Ionicons name="eye-outline" size={13} color="#3E7B27" />
@@ -421,12 +551,12 @@ export default function TotalVisits() {
         </View>
       </Modal>
 
-      {/* Pet Selector — Full Screen Modal */}
-      <Modal visible={showPetSelector} animationType="slide" onRequestClose={() => setShowPetSelector(false)}>
-        <View style={s.selectorContainer}>
+      {/* Pet Selector — Full Screen Modal*/}
+      <Modal visible={showPetSelector} animationType="slide" onRequestClose={() => { setShowPetSelector(false); setTimeout(() => setShowModal(true), 300); }}>
+        <KeyboardAvoidingView style={s.selectorContainer} behavior={Platform.OS === "ios" ? "padding" : "height"}>
           <View style={s.selectorHeader}>
             <Text style={s.selectorTitle}>Select Pet</Text>
-            <TouchableOpacity onPress={() => setShowPetSelector(false)}>
+            <TouchableOpacity onPress={() => { setShowPetSelector(false); setTimeout(() => setShowModal(true), 300); }}>
               <Ionicons name="close" size={26} color="#fff" />
             </TouchableOpacity>
           </View>
@@ -453,6 +583,7 @@ export default function TotalVisits() {
               data={filteredPets}
               keyExtractor={(item, i) => item._id || String(i)}
               contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+              keyboardShouldPersistTaps="handled"
               ListEmptyComponent={
                 <View style={{ alignItems: "center", marginTop: 40 }}>
                   <Ionicons name="paw-outline" size={48} color="#A8D96C" />
@@ -462,7 +593,7 @@ export default function TotalVisits() {
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={s.selectorItem}
-                  onPress={() => { setSelectedPet(item); setPetSearch(""); setShowPetSelector(false); }}
+                  onPress={() => onPetSelected(item)}
                 >
                   <View style={{ flex: 1 }}>
                     <Text style={s.selectorItemTxt}>{item.name}</Text>
@@ -477,12 +608,12 @@ export default function TotalVisits() {
               )}
             />
           )}
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Add Visit Modal */}
       <Modal visible={showModal} animationType="slide" onRequestClose={() => setShowModal(false)}>
-        <View style={s.modalContainer}>
+        <KeyboardAvoidingView style={s.modalContainer} behavior={Platform.OS === "ios" ? "padding" : "height"}>
           {/* Modal Header */}
           <View style={s.modalHeader}>
             <Text style={s.modalTitle}>Add New Visit</Text>
@@ -491,7 +622,7 @@ export default function TotalVisits() {
             </TouchableOpacity>
           </View>
 
-          <ScrollView contentContainerStyle={s.modalBody} keyboardShouldPersistTaps="handled">
+          <ScrollView contentContainerStyle={s.modalBody} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             {/* Pet Selector */}
             <Text style={s.fieldLabel}>🐾 Select Pet</Text>
             {selectedPet ? (
@@ -503,12 +634,12 @@ export default function TotalVisits() {
                     <Text style={s.selectedPetSub}>Owner: {selectedPet.owner.name} · {selectedPet.owner.phone}</Text>
                   )}
                 </View>
-                <TouchableOpacity onPress={() => { setSelectedPet(null); setShowPetSelector(true); }}>
+                <TouchableOpacity onPress={() => { setSelectedPet(null); openPetSelector(); }}>
                   <Text style={s.changeBtn}>Change</Text>
                 </TouchableOpacity>
               </View>
             ) : (
-              <TouchableOpacity style={s.pickerBtn} onPress={() => setShowPetSelector(true)}>
+              <TouchableOpacity style={s.pickerBtn} onPress={openPetSelector}>
                 <Text style={[s.pickerBtnTxt, { color: "#999" }]}>Tap to select a pet...</Text>
                 <Ionicons name="paw" size={18} color="#0B3D2E" />
               </TouchableOpacity>
@@ -551,15 +682,42 @@ export default function TotalVisits() {
             <Text style={s.fieldLabel}>💰 Price (₹)</Text>
             <TextInput style={s.input} placeholder="0" placeholderTextColor="#999" keyboardType="numeric" value={price} onChangeText={setPrice} />
 
-            <Text style={s.fieldLabel}>🏷️ Discount (₹)</Text>
-            <TextInput style={s.input} placeholder="0" placeholderTextColor="#999" keyboardType="numeric" value={discount} onChangeText={setDiscount} />
+            <Text style={s.fieldLabel}>🏷️ Discount (₹) <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: "#999" }}>(optional)</Text></Text>
+            <TextInput style={s.input} placeholder="Leave empty if no discount" placeholderTextColor="#999" keyboardType="numeric" value={discount} onChangeText={setDiscount} />
 
             {(Number(price) > 0) && (
               <View style={s.totalBox}>
-                <Text style={s.totalLabel}>Final Amount:</Text>
-                <Text style={s.totalValue}>₹{Math.max(0, (Number(price) || 0) - (Number(discount) || 0))}</Text>
+                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                  <Text style={s.totalLabel}>Price:</Text>
+                  <Text style={s.totalValue}>₹{Number(price) || 0}</Text>
+                </View>
+                {Number(discount) > 0 && (
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 4 }}>
+                    <Text style={[s.totalLabel, { color: "#C62828" }]}>Discount:</Text>
+                    <Text style={[s.totalValue, { color: "#C62828" }]}>- ₹{Number(discount)}</Text>
+                  </View>
+                )}
+                <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 6, paddingTop: 6, borderTopWidth: 1, borderTopColor: "#A8D96C" }}>
+                  <Text style={[s.totalLabel, { fontSize: 15 }]}>Final Amount:</Text>
+                  <Text style={[s.totalValue, { fontSize: 18 }]}>₹{Math.max(0, (Number(price) || 0) - (Number(discount) || 0))}</Text>
+                </View>
               </View>
             )}
+
+            <Text style={s.fieldLabel}>💳 Payment Mode</Text>
+            <View style={s.customerTypeRow}>
+              {["cash", "online", "card"].map((pm) => (
+                <TouchableOpacity
+                  key={pm}
+                  style={[s.ctBtn, paymentMode === pm && s.ctBtnActive]}
+                  onPress={() => setPaymentMode(pm)}
+                >
+                  <Text style={[s.ctBtnTxt, paymentMode === pm && s.ctBtnTxtActive]}>
+                    {pm === "cash" ? "💵 Cash" : pm === "online" ? "📱 Online" : "💳 Card"}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
 
             <Text style={s.fieldLabel}>👤 Customer Type</Text>
             <View style={s.customerTypeRow}>
@@ -585,24 +743,26 @@ export default function TotalVisits() {
             />
 
             <Text style={s.fieldLabel}>📅 Follow-up Date (optional)</Text>
-            <TextInput
-              style={s.input}
-              placeholder="DD/MM/YY"
-              placeholderTextColor="#999"
-              keyboardType="numeric"
-              maxLength={8}
+            <DatePickerField
               value={followUpDate}
-              onChangeText={(val) => {
-                const digits = val.replace(/\D/g, "");
-                let formatted = digits;
-                if (digits.length > 4) formatted = `${digits.slice(0,2)}/${digits.slice(2,4)}/${digits.slice(4,6)}`;
-                else if (digits.length > 2) formatted = `${digits.slice(0,2)}/${digits.slice(2)}`;
-                setFollowUpDate(formatted);
-              }}
+              onChange={setFollowUpDate}
+              placeholder="Select follow-up date"
+              minDate={new Date()}
             />
 
             <Text style={s.fieldLabel}>⏰ Follow-up Time (optional)</Text>
-            <TextInput style={s.input} placeholder="HH:MM" placeholderTextColor="#999" value={followUpTime} onChangeText={setFollowUpTime} />
+            <View style={s.timeRow}>
+              {["08:00","09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00","19:00","20:00"].map((t) => (
+                <TouchableOpacity
+                  key={t}
+                  style={[s.timeChip, followUpTime === t && s.timeChipActive]}
+                  onPress={() => setFollowUpTime(followUpTime === t ? "" : t)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[s.timeChipTxt, followUpTime === t && s.timeChipTxtActive]}>{t}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
 
             <Text style={s.fieldLabel}>🎯 Follow-up Purpose (optional)</Text>
             <TextInput style={s.input} placeholder="e.g. Vaccination" placeholderTextColor="#999" value={followUpPurpose} onChangeText={setFollowUpPurpose} />
@@ -625,9 +785,9 @@ export default function TotalVisits() {
 
             <View style={{ height: 40 }} />
           </ScrollView>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -637,27 +797,37 @@ const s = StyleSheet.create({
   header: {
     backgroundColor: "#0B3D2E", paddingHorizontal: 16,
     paddingTop: 52, paddingBottom: 16,
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    flexDirection: "row", alignItems: "center",
   },
   backBtn: { padding: 6 },
-  headerTitle: { fontSize: 18, fontFamily: "Poppins_700Bold", color: "#fff", flex: 1, marginLeft: 10 },
+  headerTitle: { flex: 1, fontSize: 18, fontFamily: "Poppins_700Bold", color: "#fff", textAlign: "center", marginLeft: 0 },
   addBtn: {
     flexDirection: "row", alignItems: "center", gap: 4,
     backgroundColor: "#A8D96C", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7,
   },
   addBtnTxt: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
 
-  filterBox: { backgroundColor: "#fff", padding: 12, gap: 8, borderBottomWidth: 1, borderBottomColor: "#D4EDD4" },
-  filterInput: {
-    borderWidth: 1, borderColor: "#D4EDD4", borderRadius: 10,
-    paddingHorizontal: 12, paddingVertical: 9, fontSize: 13,
-    fontFamily: "Inter_400Regular", color: "#333",
-  },
+  filterBox: { backgroundColor: "#fff", padding: 12, borderBottomWidth: 1, borderBottomColor: "#D4EDD4" },
+  dateRow: { flexDirection:"row", alignItems:"center", gap:8 },
+  navBtn: { width:34, height:34, borderRadius:10, backgroundColor:"#E8F5E8", justifyContent:"center", alignItems:"center" },
+  dateBtn: { flex:1, flexDirection:"row", alignItems:"center", gap:8, backgroundColor:"#F0F7F0", borderRadius:10, paddingHorizontal:12, paddingVertical:9, borderWidth:1, borderColor:"#D4EDD4" },
+  dateBtnTxt: { flex:1, fontSize:13, fontFamily:"Poppins_700Bold", color:"#0B3D2E" },
   searchBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center",
-    gap: 6, backgroundColor: "#0B3D2E", borderRadius: 10, paddingVertical: 10,
+    width: 40, height: 40, borderRadius: 10,
+    backgroundColor: "#0B3D2E", alignItems: "center", justifyContent: "center",
   },
-  searchBtnTxt: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#fff" },
+  typeChip: { flexDirection:"row", alignItems:"center", gap:5, paddingHorizontal:12, paddingVertical:7, borderRadius:20, backgroundColor:"#F0F7F0", borderWidth:1, borderColor:"#D4EDD4", marginRight:8 },
+  typeChipActive: { backgroundColor:"#0B3D2E", borderColor:"#0B3D2E" },
+  typeEmoji: { fontSize:13 },
+  typeText: { fontSize:12, fontFamily:"Inter_400Regular", color:"#3E7B27" },
+  typeTextActive: { color:"#fff", fontFamily:"Poppins_700Bold" },
+  countBanner: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    backgroundColor: "#E8F5E8", paddingHorizontal: 16, paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: "#D4EDD4",
+  },
+  countBannerTxt: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#3E7B27" },
+  countBannerNum: { fontFamily: "Poppins_700Bold", color: "#0B3D2E", fontSize: 14 },
 
   emptyBox: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10, padding: 40 },
   emptyTitle: { fontSize: 18, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
@@ -739,7 +909,6 @@ const s = StyleSheet.create({
   selectorItemSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#666", marginTop: 3 },
 
   totalBox: {
-    flexDirection: "row", justifyContent: "space-between",
     backgroundColor: "#E8F5E8", borderRadius: 10, padding: 12, marginTop: 8,
   },
   totalLabel: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
@@ -760,6 +929,12 @@ const s = StyleSheet.create({
     paddingVertical: 15, marginTop: 20,
   },
   submitBtnTxt: { fontSize: 16, fontFamily: "Poppins_700Bold", color: "#fff" },
+
+  timeRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },
+  timeChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: "#D4EDD4", backgroundColor: "#F0F7F0" },
+  timeChipActive: { backgroundColor: "#0B3D2E", borderColor: "#0B3D2E" },
+  timeChipTxt: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#3E7B27" },
+  timeChipTxtActive: { color: "#A8D96C" },
 
   // Preview Bottom Sheet
   previewOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" },

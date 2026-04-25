@@ -51,17 +51,14 @@ export default function ServiceDetailScreen() {
 
   return (
     <View style={s.container}>
-      {/* Header */}
-      <View style={[s.hero, { backgroundColor: accentColor }]}>
-        <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
-          <Ionicons name="arrow-back" size={22} color="#fff" />
+      {/* Header — same as totalvisits */}
+      <View style={[s.header, { backgroundColor: accentColor }]}>
+        <TouchableOpacity onPress={() => router.back()} style={s.backBtn} activeOpacity={0.8}>
+          <Ionicons name="close" size={24} color="#fff" />
         </TouchableOpacity>
-        <View style={s.heroContent}>
-          <Text style={s.heroEmoji}>{serviceEmoji || "🐾"}</Text>
-          <Text style={s.heroTitle}>{serviceName}</Text>
-          {serviceDescription ? (
-            <Text style={s.heroDesc}>{serviceDescription}</Text>
-          ) : null}
+        <View style={{ flex: 1 }}>
+          <Text style={s.headerTitle}>{serviceEmoji || "🐾"}  {serviceName}</Text>
+          {serviceDescription ? <Text style={s.headerSub} numberOfLines={1}>{serviceDescription}</Text> : null}
         </View>
       </View>
 
@@ -186,14 +183,13 @@ export default function ServiceDetailScreen() {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F0F7F0" },
 
-  hero: {
-    paddingTop: 52, paddingBottom: 28, paddingHorizontal: 20,
+  header: {
+    paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16,
+    flexDirection: "row", alignItems: "center", gap: 12,
   },
-  backBtn: { marginBottom: 16, alignSelf: "flex-start", padding: 4 },
-  heroContent: { alignItems: "center" },
-  heroEmoji: { fontSize: 56, marginBottom: 10 },
-  heroTitle: { fontSize: 26, fontFamily: "Poppins_700Bold", color: "#fff", textAlign: "center", marginBottom: 6 },
-  heroDesc: { fontSize: 13, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.8)", textAlign: "center", lineHeight: 20 },
+  backBtn: { width: 36, height: 36, justifyContent: "center" },
+  headerTitle: { fontSize: 20, fontFamily: "Poppins_700Bold", color: "#fff" },
+  headerSub: { fontSize: 11, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.75)", marginTop: 2 },
 
   body: { padding: 16 },
 

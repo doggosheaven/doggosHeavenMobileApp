@@ -1,61 +1,51 @@
-import { useState, useCallback } from "react";
+import { useState, useEffect } from "react";
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  TextInput, Alert, ActivityIndicator,
+  Alert, ActivityIndicator, RefreshControl,
 } from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import RazorpayCheckout from "react-native-razorpay";
-import Header from "../../components/Header";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
+import { useApp } from "../../context/AppContext";
 
-const QUICK_AMOUNTS = [100, 500, 1000, 2000, 5000, 11500];
+let RazorpayCheckout = null;
+try { RazorpayCheckout = require("react-native-razorpay").default; } catch {}
+
+const SUBSCRIPTION_AMOUNT = 11500;
 
 export default function WalletScreen() {
   const router = useRouter();
-  const [wallet, setWallet] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [customAmount, setCustomAmount] = useState("");
-  const [selectedAmount, setSelectedAmount] = useState(null);
   const [paying, setPaying] = useState(false);
   const [auth, setAuth] = useState({});
+  const [refreshing, setRefreshing] = useState(false);
+  const { wallet, loadWallet } = useApp();
 
-  const load = useCallback(async () => {
-    const { user, token } = await getAuth();
-    setAuth({ user, token });
-    try {
-      const res = await fetch(`${BASE_URL}/api/v1/wallet`, {
-        headers: { Authorization: token || "" },
-      });
-      const data = await res.json();
-      if (data.success) setWallet(data.wallet);
-    } catch (e) {
-      console.log(e);
-    } finally {
-      setLoading(false);
-    }
+  useEffect(() => {
+    loadWallet();
+    getAuth().then(({ user, token }) => setAuth({ user, token }));
   }, []);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
-
-  const getFinalAmount = () => {
-    if (customAmount) return parseFloat(customAmount);
-    return selectedAmount;
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadWallet(true);
+    setRefreshing(false);
   };
 
+  const loading = !wallet && !refreshing;
+
   const handleAddMoney = async () => {
-    const amount = getFinalAmount();
-    if (!amount || amount < 1)
-      return Alert.alert("Invalid Amount", "Please select or enter an amount.");
+    if (!RazorpayCheckout) {
+      Alert.alert("Not Supported", "Online payment requires a development build.");
+      return;
+    }
 
     setPaying(true);
     try {
       const orderRes = await fetch(`${BASE_URL}/api/v1/wallet/recharge/order`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: auth.token || "" },
-        body: JSON.stringify({ amount }),
+        body: JSON.stringify({ amount: SUBSCRIPTION_AMOUNT }),
       });
       const orderData = await orderRes.json();
       if (!orderData.success) throw new Error(orderData.message);
@@ -63,10 +53,10 @@ export default function WalletScreen() {
       const paymentData = await RazorpayCheckout.open({
         key: orderData.key,
         order_id: orderData.order.id,
-        amount: amount * 100,
+        amount: SUBSCRIPTION_AMOUNT * 100,
         currency: "INR",
         name: "Doggos Heaven",
-        description: "Wallet Recharge",
+        description: "15-Day Boarding Plan — Wallet Recharge",
         prefill: { name: auth.user?.fullName || "", email: auth.user?.email || "" },
         theme: { color: "#0B3D2E" },
       });
@@ -74,14 +64,12 @@ export default function WalletScreen() {
       const verifyRes = await fetch(`${BASE_URL}/api/v1/wallet/recharge/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: auth.token || "" },
-        body: JSON.stringify({ ...paymentData, amount }),
+        body: JSON.stringify({ ...paymentData, amount: SUBSCRIPTION_AMOUNT }),
       });
       const verifyData = await verifyRes.json();
       if (verifyData.success) {
-        Alert.alert("✅ Money Added!", `₹${amount} added to your wallet.`);
-        setCustomAmount("");
-        setSelectedAmount(null);
-        load();
+        Alert.alert("✅ Money Added!", `₹${SUBSCRIPTION_AMOUNT.toLocaleString()} added to your wallet.`);
+        loadWallet(true);
       } else {
         Alert.alert("Failed", verifyData.message);
       }
@@ -98,118 +86,76 @@ export default function WalletScreen() {
       " · " + date.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
   };
 
-  const recentTx = wallet?.transactions ? [...wallet.transactions].reverse().slice(0, 5) : [];
-
   if (loading)
-    return <View style={styles.center}><ActivityIndicator size="large" color="#0B3D2E" /></View>;
+    return <View style={s.center}><ActivityIndicator size="large" color="#0B3D2E" /></View>;
 
   const balance = wallet?.balance || 0;
 
+  const recentTx = wallet?.transactions ? [...wallet.transactions].reverse().slice(0, 5) : [];
+
   return (
-    <View style={styles.container}>
-      <Header title="My Wallet" />
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+    <View style={s.container}>
+      <View style={s.header}>
+        <TouchableOpacity onPress={() => router.back()} style={s.backBtn} activeOpacity={0.8}>
+          <Ionicons name="close" size={24} color="#fff" />
+        </TouchableOpacity>
+        <Text style={s.headerTitle}>My Wallet</Text>
+        <View style={{ width: 36 }} />
+      </View>
+      <ScrollView
+        contentContainerStyle={s.scroll}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0B3D2E" />}
+      >
 
         {/* Balance Card */}
-        <View style={styles.balanceCard}>
-          <View style={styles.balanceTop}>
+        <View style={s.balanceCard}>
+          <View style={s.balanceTop}>
             <View>
-              <Text style={styles.balanceLabel}>Doggos Heaven Wallet</Text>
-              <Text style={styles.balanceAmount}>₹{balance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</Text>
+              <Text style={s.balanceLabel}>Doggos Heaven Wallet</Text>
+              <Text style={s.balanceAmount}>₹{balance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</Text>
             </View>
-            <View style={styles.walletIconBox}>
+            <View style={s.walletIconBox}>
               <Ionicons name="wallet" size={28} color="#A8D96C" />
             </View>
           </View>
-          <View style={styles.balanceDivider} />
-          <View style={styles.balanceBottom}>
+          <View style={s.balanceDivider} />
+          <View style={s.balanceBottom}>
             <Ionicons name="shield-checkmark-outline" size={13} color="#A8D96C" />
-            <Text style={styles.balanceSecure}>Secured · Instant deduction for boarding</Text>
+            <Text style={s.balanceSecure}>Secured · Instant deduction for boarding</Text>
           </View>
         </View>
 
-        {/* Boarding Subscribe Card */}
-        <TouchableOpacity
-          style={styles.subscribeCard}
-          onPress={() => router.push("/screens/subscriptiondetail")}
-          activeOpacity={0.88}
-        >
-          <View style={styles.subscribeLeft}>
-            <View style={styles.subscribeBadge}>
-              <Text style={styles.subscribeBadgeText}>🐾 SUBSCRIPTION</Text>
+        {/* Add Money — Fixed 11500 only */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>Add Money to Wallet</Text>
+
+          <View style={s.planCard}>
+            <View style={s.planBadge}>
+              <Text style={s.planBadgeTxt}>🐾 15-DAY BOARDING PLAN</Text>
             </View>
-            <Text style={styles.subscribeTitle}>15-Day Boarding Plan</Text>
-            <Text style={styles.subscribePrice}>₹11,500 <Text style={styles.subscribePriceSub}>per pet · ₹766/day</Text></Text>
-            <View style={styles.subscribeFeatures}>
-              <View style={styles.subscribeFeatureRow}>
-                <Ionicons name="checkmark-circle" size={13} color="#A8D96C" />
-                <Text style={styles.subscribeFeatureText}>Daily auto-deduction from wallet</Text>
+            <View style={s.planRow}>
+              <View>
+                <Text style={s.planAmount}>₹11,500</Text>
+                <Text style={s.planSub}>₹766/day per pet</Text>
               </View>
-              <View style={styles.subscribeFeatureRow}>
-                <Ionicons name="checkmark-circle" size={13} color="#A8D96C" />
-                <Text style={styles.subscribeFeatureText}>Multi-pet support</Text>
+              <View style={s.planFeatures}>
+                <View style={s.planFeatureRow}>
+                  <Ionicons name="checkmark-circle" size={13} color="#3E7B27" />
+                  <Text style={s.planFeatureTxt}>Daily auto-deduction</Text>
+                </View>
+                <View style={s.planFeatureRow}>
+                  <Ionicons name="checkmark-circle" size={13} color="#3E7B27" />
+                  <Text style={s.planFeatureTxt}>Multi-pet support</Text>
+                </View>
               </View>
             </View>
           </View>
-          <View style={styles.subscribeRight}>
-            <Text style={styles.subscribeArrow}>→</Text>
-            <Text style={styles.subscribeBtn}>Subscribe</Text>
-          </View>
-        </TouchableOpacity>
-
-        {/* Add Money Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Add Money</Text>
-
-          {/* Quick amount chips */}
-          <View style={styles.quickGrid}>
-            {QUICK_AMOUNTS.map((a) => (
-              <TouchableOpacity
-                key={a}
-                style={[styles.quickChip, selectedAmount === a && !customAmount && styles.quickChipActive]}
-                onPress={() => { setSelectedAmount(a); setCustomAmount(""); }}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.quickChipText, selectedAmount === a && !customAmount && styles.quickChipTextActive]}>
-                  ₹{a.toLocaleString()}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* Custom amount input */}
-          <View style={styles.inputRow}>
-            <View style={styles.inputBox}>
-              <Text style={styles.inputPrefix}>₹</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter amount"
-                placeholderTextColor="#bbb"
-                keyboardType="numeric"
-                value={customAmount}
-                onChangeText={(v) => { setCustomAmount(v); setSelectedAmount(null); }}
-              />
-              {customAmount ? (
-                <TouchableOpacity onPress={() => setCustomAmount("")}>
-                  <Ionicons name="close-circle" size={18} color="#ccc" />
-                </TouchableOpacity>
-              ) : null}
-            </View>
-          </View>
-
-          {/* Selected amount preview */}
-          {(getFinalAmount() > 0) && (
-            <View style={styles.amountPreview}>
-              <Text style={styles.amountPreviewText}>Adding </Text>
-              <Text style={styles.amountPreviewVal}>₹{getFinalAmount()?.toLocaleString()}</Text>
-              <Text style={styles.amountPreviewText}> to wallet</Text>
-            </View>
-          )}
 
           <TouchableOpacity
-            style={[styles.addMoneyBtn, (paying || !getFinalAmount()) && styles.addMoneyBtnDisabled]}
+            style={[s.addMoneyBtn, paying && s.addMoneyBtnDisabled]}
             onPress={handleAddMoney}
-            disabled={paying || !getFinalAmount()}
+            disabled={paying}
             activeOpacity={0.85}
           >
             {paying ? (
@@ -217,44 +163,37 @@ export default function WalletScreen() {
             ) : (
               <>
                 <Ionicons name="add-circle" size={20} color="#0B3D2E" />
-                <Text style={styles.addMoneyBtnText}>
-                  {getFinalAmount() ? `Add ₹${getFinalAmount()?.toLocaleString()}` : "Add Money"}
-                </Text>
+                <Text style={s.addMoneyBtnText}>Add ₹11,500 to Wallet</Text>
               </>
             )}
           </TouchableOpacity>
-          <Text style={styles.payNote}>Powered by Razorpay · UPI, Cards, Net Banking</Text>
+          <Text style={s.payNote}>Powered by Razorpay · UPI, Cards, Net Banking</Text>
         </View>
 
         {/* Recent Transactions */}
         {recentTx.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Recent Transactions</Text>
-              {wallet?.transactions?.length > 5 && (
-                <TouchableOpacity>
-                  <Text style={styles.viewAllLink}>View All</Text>
-                </TouchableOpacity>
-              )}
+          <View style={s.section}>
+            <View style={s.sectionHeaderRow}>
+              <Text style={s.sectionTitle}>Recent Transactions</Text>
             </View>
             {recentTx.map((tx, i) => (
-              <View key={i} style={[styles.txRow, i === recentTx.length - 1 && { borderBottomWidth: 0 }]}>
-                <View style={[styles.txIconBox, { backgroundColor: tx.type === "credit" ? "#E8F5E8" : "#FFF0F0" }]}>
+              <View key={i} style={[s.txRow, i === recentTx.length - 1 && { borderBottomWidth: 0 }]}>
+                <View style={[s.txIconBox, { backgroundColor: tx.type === "credit" ? "#E8F5E8" : "#FFF0F0" }]}>
                   <Ionicons
                     name={tx.type === "credit" ? "arrow-down" : "arrow-up"}
                     size={16}
                     color={tx.type === "credit" ? "#2E7D32" : "#C62828"}
                   />
                 </View>
-                <View style={styles.txInfo}>
-                  <Text style={styles.txDesc} numberOfLines={1}>{tx.description}</Text>
-                  <Text style={styles.txDate}>{formatDate(tx.createdAt)}</Text>
+                <View style={s.txInfo}>
+                  <Text style={s.txDesc} numberOfLines={1}>{tx.description}</Text>
+                  <Text style={s.txDate}>{formatDate(tx.createdAt)}</Text>
                 </View>
-                <View style={styles.txRight}>
-                  <Text style={[styles.txAmount, { color: tx.type === "credit" ? "#2E7D32" : "#C62828" }]}>
+                <View style={s.txRight}>
+                  <Text style={[s.txAmount, { color: tx.type === "credit" ? "#2E7D32" : "#C62828" }]}>
                     {tx.type === "credit" ? "+" : "−"}₹{tx.amount.toFixed(0)}
                   </Text>
-                  <Text style={styles.txBal}>₹{tx.balanceAfter.toFixed(0)}</Text>
+                  <Text style={s.txBal}>₹{tx.balanceAfter.toFixed(0)}</Text>
                 </View>
               </View>
             ))}
@@ -262,9 +201,9 @@ export default function WalletScreen() {
         )}
 
         {recentTx.length === 0 && (
-          <View style={styles.emptyTx}>
+          <View style={s.emptyTx}>
             <Ionicons name="receipt-outline" size={36} color="#D4EDD4" />
-            <Text style={styles.emptyTxText}>No transactions yet</Text>
+            <Text style={s.emptyTxText}>No transactions yet</Text>
           </View>
         )}
 
@@ -273,12 +212,19 @@ export default function WalletScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F0F7F0" },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   scroll: { padding: 16, paddingBottom: 48 },
 
-  // Balance Card
+  header: {
+    backgroundColor: "#0B3D2E", paddingHorizontal: 16,
+    paddingTop: 12, paddingBottom: 16,
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+  },
+  backBtn: { width: 36, height: 36, justifyContent: "center" },
+  headerTitle: { fontSize: 18, fontFamily: "Poppins_700Bold", color: "#fff", flex: 1, textAlign: "center" },
+
   balanceCard: {
     backgroundColor: "#0B3D2E", borderRadius: 20, padding: 20,
     marginBottom: 14, elevation: 4,
@@ -295,67 +241,28 @@ const styles = StyleSheet.create({
   balanceBottom: { flexDirection: "row", alignItems: "center", gap: 6 },
   balanceSecure: { fontSize: 11, fontFamily: "Inter_400Regular", color: "rgba(168,217,108,0.8)" },
 
-  // Subscribe Card
-  subscribeCard: {
-    backgroundColor: "#1A5C3A", borderRadius: 18, padding: 18,
-    flexDirection: "row", alignItems: "center",
-    marginBottom: 14, elevation: 3,
-    borderWidth: 1.5, borderColor: "#A8D96C",
-  },
-  subscribeLeft: { flex: 1 },
-  subscribeBadge: {
-    backgroundColor: "rgba(168,217,108,0.2)", alignSelf: "flex-start",
-    paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20, marginBottom: 8,
-  },
-  subscribeBadgeText: { fontSize: 10, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
-  subscribeTitle: { fontSize: 17, fontFamily: "Poppins_700Bold", color: "#fff", marginBottom: 4 },
-  subscribePrice: { fontSize: 15, fontFamily: "Poppins_700Bold", color: "#A8D96C", marginBottom: 10 },
-  subscribePriceSub: { fontSize: 11, fontFamily: "Inter_400Regular", color: "rgba(168,217,108,0.7)" },
-  subscribeFeatures: { gap: 4 },
-  subscribeFeatureRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  subscribeFeatureText: { fontSize: 11, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.8)" },
-  subscribeRight: { alignItems: "center", gap: 6, marginLeft: 12 },
-  subscribeArrow: { fontSize: 22, color: "#A8D96C", fontFamily: "Poppins_700Bold" },
-  subscribeBtn: {
-    fontSize: 11, fontFamily: "Poppins_700Bold", color: "#0B3D2E",
-    backgroundColor: "#A8D96C", paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20,
-  },
-
-  // Section
   section: {
     backgroundColor: "#fff", borderRadius: 18, padding: 16,
     marginBottom: 14, elevation: 2, borderWidth: 1, borderColor: "#E8F5E8",
   },
   sectionHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },
   sectionTitle: { fontSize: 15, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginBottom: 14 },
-  viewAllLink: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#3E7B27" },
 
-  // Quick chips
-  quickGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 14 },
-  quickChip: {
-    paddingHorizontal: 16, paddingVertical: 9, borderRadius: 24,
-    borderWidth: 1.5, borderColor: "#D4EDD4", backgroundColor: "#F0F7F0",
+  planCard: {
+    backgroundColor: "#F0F7F0", borderRadius: 14, padding: 14,
+    borderWidth: 1.5, borderColor: "#A8D96C", marginBottom: 16,
   },
-  quickChipActive: { backgroundColor: "#0B3D2E", borderColor: "#0B3D2E" },
-  quickChipText: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
-  quickChipTextActive: { color: "#A8D96C" },
-
-  // Input
-  inputRow: { marginBottom: 12 },
-  inputBox: {
-    flexDirection: "row", alignItems: "center",
-    backgroundColor: "#F0F7F0", borderRadius: 14, paddingHorizontal: 14, height: 52,
-    borderWidth: 1.5, borderColor: "#D4EDD4",
+  planBadge: {
+    backgroundColor: "#E8F5E8", alignSelf: "flex-start",
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, marginBottom: 10,
   },
-  inputPrefix: { fontSize: 18, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginRight: 6 },
-  input: { flex: 1, fontSize: 16, fontFamily: "Poppins_700Bold", color: "#1A1A1A" },
-
-  amountPreview: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center",
-    marginBottom: 12,
-  },
-  amountPreviewText: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#666" },
-  amountPreviewVal: { fontSize: 15, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+  planBadgeTxt: { fontSize: 10, fontFamily: "Poppins_700Bold", color: "#3E7B27" },
+  planRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  planAmount: { fontSize: 28, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+  planSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#3E7B27", marginTop: 2 },
+  planFeatures: { gap: 6 },
+  planFeatureRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  planFeatureTxt: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#444" },
 
   addMoneyBtn: {
     backgroundColor: "#A8D96C", borderRadius: 14, height: 52,
@@ -365,7 +272,6 @@ const styles = StyleSheet.create({
   addMoneyBtnText: { fontSize: 15, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
   payNote: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#aaa", textAlign: "center", marginTop: 8 },
 
-  // Transactions
   txRow: {
     flexDirection: "row", alignItems: "center", gap: 12,
     paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#F5FFF5",

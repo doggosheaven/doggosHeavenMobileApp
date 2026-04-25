@@ -82,14 +82,17 @@ export default function VisitDetailScreen() {
 
   return (
     <View style={s.container}>
-      {/* Hero */}
-      <View style={[s.hero, { backgroundColor: accentColor }]}>
-        <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
-          <Ionicons name="arrow-back" size={22} color="#fff" />
+      {/* Standard Header */}
+      <View style={[s.header, { backgroundColor: accentColor }]}>
+        <TouchableOpacity onPress={() => router.back()} style={s.backBtn} activeOpacity={0.8}>
+          <Ionicons name="close" size={24} color="#fff" />
         </TouchableOpacity>
-        <Text style={s.heroEmoji}>{emoji}</Text>
-        <Text style={s.heroTitle}>{purpose} Visit</Text>
-        <Text style={s.heroSub}>Recorded on {fmtDate(visit?.createdAt)}</Text>
+        <View style={{ flex: 1, alignItems: "center" }}>
+          <Text style={s.heroEmoji}>{emoji}</Text>
+          <Text style={s.heroTitle}>{purpose} Visit</Text>
+          <Text style={s.heroSub}>Recorded on {fmtDate(visit?.createdAt)}</Text>
+        </View>
+        <View style={{ width: 36 }} />
       </View>
 
       <ScrollView contentContainerStyle={s.body} showsVerticalScrollIndicator={false}>
@@ -184,13 +187,14 @@ const s = StyleSheet.create({
   backBtnCenter: { backgroundColor: "#0B3D2E", borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12, marginTop: 8 },
   backBtnCenterTxt: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
 
-  hero: {
-    paddingTop: 52, paddingBottom: 24, paddingHorizontal: 20, alignItems: "center",
+  header: {
+    paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16,
+    flexDirection: "row", alignItems: "center",
   },
-  backBtn: { position: "absolute", top: 52, left: 16, padding: 6 },
-  heroEmoji: { fontSize: 48, marginBottom: 8 },
-  heroTitle: { fontSize: 22, fontFamily: "Poppins_700Bold", color: "#fff", marginBottom: 4 },
-  heroSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.75)" },
+  backBtn: { width: 36, height: 36, justifyContent: "center", padding: 6 },
+  heroEmoji: { fontSize: 36, marginBottom: 4 },
+  heroTitle: { fontSize: 18, fontFamily: "Poppins_700Bold", color: "#fff", marginBottom: 2 },
+  heroSub: { fontSize: 11, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.75)" },
 
   body: { padding: 16 },
 

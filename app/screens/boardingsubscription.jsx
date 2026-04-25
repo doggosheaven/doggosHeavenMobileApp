@@ -1,52 +1,39 @@
-import { useState, useCallback } from "react";
+import { useState, useEffect } from "react";
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  Alert, ActivityIndicator,
+  Alert, ActivityIndicator, StatusBar,
 } from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import Header from "../../components/Header";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
+import { useApp } from "../../context/AppContext";
 
 const PRICE_PER_DAY = 766.67;
 
 export default function BoardingScreen() {
   const router = useRouter();
   const [auth, setAuth] = useState({});
-  const [pets, setPets] = useState([]);
   const [selectedPets, setSelectedPets] = useState([]);
-  const [activeBoarding, setActiveBoarding] = useState(null);
-  const [walletBalance, setWalletBalance] = useState(0);
-  const [loading, setLoading] = useState(true);
   const [activating, setActivating] = useState(false);
   const [deboarding, setDeboarding] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const { pets, boarding, loadPets, loadBoarding } = useApp();
 
-  const load = useCallback(async () => {
-    const { user, token } = await getAuth();
-    setAuth({ user, token });
-    try {
-      const [petsRes, dashRes] = await Promise.all([
-        fetch(`${BASE_URL}/api/v1/customerappointment/getcustomerpets?email=${encodeURIComponent(user?.email)}`, {
-          headers: { Authorization: token || "" },
-        }),
-        fetch(`${BASE_URL}/api/v1/boarding-subscription/dashboard`, {
-          headers: { Authorization: token || "" },
-        }),
-      ]);
-      const petsData = await petsRes.json();
-      const dashData = await dashRes.json();
-      if (petsData.success) setPets(petsData.pets || []);
-      if (dashData.success) {
-        setActiveBoarding(dashData.dashboard?.activeBoarding || null);
-        setWalletBalance(dashData.dashboard?.walletBalance || 0);
-      }
-    } catch (e) { console.log(e); }
-    finally { setLoading(false); }
+  const activeBoarding = boarding?.activeBoarding || null;
+  const walletBalance = boarding?.walletBalance || 0;
+
+  useEffect(() => {
+    loadPets();
+    loadBoarding();
+    getAuth().then(({ user, token }) => setAuth({ user, token }));
   }, []);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+  const reload = async () => {
+    await Promise.all([loadPets(true), loadBoarding(true)]);
+  };
+
+  const loading = !boarding && !refreshing;
 
   const togglePet = (id) =>
     setSelectedPets((prev) =>
@@ -62,9 +49,9 @@ export default function BoardingScreen() {
     if (walletBalance < dailyCharge) {
       Alert.alert(
         "Insufficient Balance",
-        `Your wallet has ₹${walletBalance.toFixed(0)} but daily charge is ₹${dailyCharge}. Please add money first.`,
+        `Your wallet has Rs.${walletBalance.toFixed(0)} but daily charge is Rs.${dailyCharge}. Please add money first.`,
         [
-          { text: "Add Money", onPress: () => router.push("/screens/subscriptiondetail") },
+          { text: "Add Money", onPress: () => router.push("/screens/walletscreen") },
           { text: "Cancel", style: "cancel" },
         ]
       );
@@ -73,7 +60,7 @@ export default function BoardingScreen() {
 
     Alert.alert(
       "Start Boarding?",
-      `₹${dailyCharge}/day will be deducted from your wallet for ${selectedPets.length} pet${selectedPets.length > 1 ? "s" : ""}.`,
+      `Rs.${dailyCharge}/day will be deducted from your wallet for ${selectedPets.length} pet${selectedPets.length > 1 ? "s" : ""}.`,
       [
         { text: "Cancel", style: "cancel" },
         { text: "Start Boarding", onPress: confirmActivate },
@@ -91,13 +78,13 @@ export default function BoardingScreen() {
       });
       const data = await res.json();
       if (data.success) {
-        Alert.alert("🐾 Boarding Started!", "Daily deduction will begin from tomorrow.");
+        Alert.alert("Boarding Started!", "Daily deduction will begin from tomorrow.");
         setSelectedPets([]);
-        load();
+        reload();
       } else {
         Alert.alert("Error", data.message);
       }
-    } catch (e) {
+    } catch {
       Alert.alert("Error", "Network error. Please try again.");
     } finally {
       setActivating(false);
@@ -125,12 +112,12 @@ export default function BoardingScreen() {
       });
       const data = await res.json();
       if (data.success) {
-        Alert.alert("✅ Deboarded", "Your pets have been deboarded successfully.");
-        load();
+        Alert.alert("Deboarded", "Your pets have been deboarded successfully.");
+        reload();
       } else {
         Alert.alert("Error", data.message);
       }
-    } catch (e) {
+    } catch {
       Alert.alert("Error", "Network error. Please try again.");
     } finally {
       setDeboarding(false);
@@ -140,11 +127,24 @@ export default function BoardingScreen() {
   if (loading)
     return <View style={s.center}><ActivityIndicator size="large" color="#0B3D2E" /></View>;
 
-  // ── Active Boarding View ───────────────────────────────────────────────────
+  // ── Active Boarding View ──────────────────────────────────────────────────
   if (activeBoarding) {
     return (
       <View style={s.container}>
-        <Header title="My Boarding" />
+        <StatusBar barStyle="light-content" backgroundColor="#0B3D2E" />
+        <View style={s.header}>
+          <TouchableOpacity onPress={() => router.back()} style={s.backBtn} activeOpacity={0.8}>
+            <Ionicons name="close" size={24} color="#fff" />
+          </TouchableOpacity>
+          <View style={{ flex: 1 }}>
+            <Text style={s.headerTitle}>My Boarding</Text>
+            <Text style={s.headerSub}>Active boarding plan</Text>
+          </View>
+          <TouchableOpacity style={s.walletBtn} onPress={() => router.push("/screens/walletscreen")} activeOpacity={0.8}>
+            <Ionicons name="wallet-outline" size={16} color="#A8D96C" />
+            <Text style={s.walletBtnText}>Rs.{walletBalance.toFixed(0)}</Text>
+          </TouchableOpacity>
+        </View>
         <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
 
           {/* Active status card */}
@@ -153,14 +153,14 @@ export default function BoardingScreen() {
               <Text style={s.activeCardEmoji}>🏠</Text>
               <View style={{ flex: 1 }}>
                 <Text style={s.activeCardTitle}>15-Day Boarding Plan</Text>
-                <View style={s.activePill}><Text style={s.activePillText}>● ACTIVE</Text></View>
+                <View style={s.activePill}><Text style={s.activePillText}>ACTIVE</Text></View>
               </View>
             </View>
 
             <View style={s.statsRow}>
               {[
                 { label: "Pets", val: activeBoarding.numberOfPets },
-                { label: "Daily Charge", val: `₹${activeBoarding.dailyCharge}` },
+                { label: "Daily Charge", val: `Rs.${activeBoarding.dailyCharge}` },
                 { label: "Days Left", val: activeBoarding.daysRemaining },
                 { label: "Wallet Days", val: activeBoarding.estimatedDaysLeft },
               ].map((item) => (
@@ -183,20 +183,22 @@ export default function BoardingScreen() {
 
           {/* Wallet balance */}
           <View style={s.walletCard}>
-            <Ionicons name="wallet-outline" size={20} color="#0B3D2E" />
-            <View style={{ flex: 1 }}>
+            <Ionicons name="wallet-outline" size={22} color="#0B3D2E" />
+            <View style={s.walletCardTop}>
               <Text style={s.walletLabel}>Wallet Balance</Text>
-              <Text style={s.walletVal}>₹{walletBalance.toLocaleString("en-IN")}</Text>
+              <View style={s.walletCardBottom}>
+                <Text style={s.walletVal}>Rs.{walletBalance.toLocaleString("en-IN")}</Text>
+                <TouchableOpacity style={s.addMoneyBtn} onPress={() => router.push("/screens/walletscreen")}>
+                  <Ionicons name="add" size={13} color="#0B3D2E" />
+                  <Text style={s.addMoneyText}>Add Money</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-            <TouchableOpacity style={s.addMoneyBtn} onPress={() => router.push("/screens/subscriptiondetail")}>
-              <Ionicons name="add" size={14} color="#0B3D2E" />
-              <Text style={s.addMoneyText}>Add Money</Text>
-            </TouchableOpacity>
           </View>
 
           {/* Low balance warning */}
           {activeBoarding.lowBalance && (
-            <TouchableOpacity style={s.warningBox} onPress={() => router.push("/screens/subscriptiondetail")}>
+            <TouchableOpacity style={s.warningBox} onPress={() => router.push("/screens/walletscreen")}>
               <Ionicons name="warning-outline" size={18} color="#B8860B" />
               <Text style={s.warningText}>Low balance! Add money to avoid boarding stop.</Text>
               <Ionicons name="chevron-forward" size={16} color="#B8860B" />
@@ -216,7 +218,7 @@ export default function BoardingScreen() {
             </View>
             <View style={[s.detailRow, { borderBottomWidth: 0 }]}>
               <Text style={s.detailLabel}>Daily Deduction</Text>
-              <Text style={[s.detailVal, { color: "#C62828" }]}>−₹{activeBoarding.dailyCharge}/day</Text>
+              <Text style={[s.detailVal, { color: "#C62828" }]}>-Rs.{activeBoarding.dailyCharge}/day</Text>
             </View>
           </View>
 
@@ -242,23 +244,38 @@ export default function BoardingScreen() {
     );
   }
 
-  // ── Pet Selection View ─────────────────────────────────────────────────────
+  // ── No Active Boarding — Start New ───────────────────────────────────────
   return (
     <View style={s.container}>
-      <Header title="Start Boarding" />
+      <StatusBar barStyle="light-content" backgroundColor="#0B3D2E" />
+      <View style={s.header}>
+        <TouchableOpacity onPress={() => router.back()} style={s.backBtn} activeOpacity={0.8}>
+          <Ionicons name="close" size={24} color="#fff" />
+        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
+          <Text style={s.headerTitle}>Wallet Boarding</Text>
+          <Text style={s.headerSub}>Rs.{PRICE_PER_DAY.toFixed(0)}/pet/day • Deducted daily</Text>
+        </View>
+        <TouchableOpacity style={s.walletBtn} onPress={() => router.push("/screens/walletscreen")} activeOpacity={0.8}>
+          <Ionicons name="wallet-outline" size={16} color="#A8D96C" />
+          <Text style={s.walletBtnText}>Rs.{walletBalance.toFixed(0)}</Text>
+        </TouchableOpacity>
+      </View>
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
 
-        {/* Wallet balance top */}
+        {/* Wallet balance */}
         <View style={s.walletCard}>
-          <Ionicons name="wallet-outline" size={20} color="#0B3D2E" />
-          <View style={{ flex: 1 }}>
+          <Ionicons name="wallet-outline" size={22} color="#0B3D2E" />
+          <View style={s.walletCardTop}>
             <Text style={s.walletLabel}>Wallet Balance</Text>
-            <Text style={s.walletVal}>₹{walletBalance.toLocaleString("en-IN")}</Text>
+            <View style={s.walletCardBottom}>
+              <Text style={s.walletVal}>Rs.{walletBalance.toLocaleString("en-IN")}</Text>
+              <TouchableOpacity style={s.addMoneyBtn} onPress={() => router.push("/screens/walletscreen")}>
+                <Ionicons name="add" size={13} color="#0B3D2E" />
+                <Text style={s.addMoneyText}>Add Money</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-          <TouchableOpacity style={s.addMoneyBtn} onPress={() => router.push("/screens/subscriptiondetail")}>
-            <Ionicons name="add" size={14} color="#0B3D2E" />
-            <Text style={s.addMoneyText}>Add Money</Text>
-          </TouchableOpacity>
         </View>
 
         {/* Plan info */}
@@ -266,14 +283,14 @@ export default function BoardingScreen() {
           <Text style={s.planInfoEmoji}>🏠</Text>
           <View style={{ flex: 1 }}>
             <Text style={s.planInfoTitle}>15-Day Boarding Plan</Text>
-            <Text style={s.planInfoSub}>₹{PRICE_PER_DAY}/day per pet · deducted from wallet</Text>
+            <Text style={s.planInfoSub}>Rs.{PRICE_PER_DAY.toFixed(0)}/pet/day • Deducted from wallet daily</Text>
           </View>
         </View>
 
         {/* Pet selection */}
         <View style={s.card}>
           <Text style={s.cardTitle}>Select Pets to Board</Text>
-          <Text style={s.cardSub}>Each pet = ₹{PRICE_PER_DAY}/day from wallet</Text>
+          <Text style={s.cardSub}>Choose which pets to include in boarding</Text>
 
           {pets.length === 0 ? (
             <TouchableOpacity style={s.addPetBox} onPress={() => router.push("/(tabs)/Pet/PetForm")}>
@@ -314,12 +331,12 @@ export default function BoardingScreen() {
               </View>
               <View style={s.costRow}>
                 <Text style={s.costLabel}>Daily deduction</Text>
-                <Text style={s.costVal}>₹{dailyCharge}/day</Text>
+                <Text style={s.costVal}>Rs.{dailyCharge}/day</Text>
               </View>
               <View style={[s.costRow, { borderBottomWidth: 0 }]}>
                 <Text style={s.costLabel}>Wallet balance</Text>
                 <Text style={[s.costVal, walletBalance < dailyCharge && { color: "#C62828" }]}>
-                  ₹{walletBalance.toFixed(0)}
+                  Rs.{walletBalance.toFixed(0)}
                 </Text>
               </View>
             </View>
@@ -342,7 +359,7 @@ export default function BoardingScreen() {
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity style={s.subscribeLink} onPress={() => router.push("/screens/subscriptiondetail")}>
+        <TouchableOpacity style={s.subscribeLink} onPress={() => router.push("/screens/walletscreen")}>
           <Ionicons name="information-circle-outline" size={15} color="#3E7B27" />
           <Text style={s.subscribeLinkText}>View Subscription Details & Add Money</Text>
         </TouchableOpacity>
@@ -356,6 +373,21 @@ const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F0F7F0" },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   scroll: { padding: 16, paddingBottom: 48 },
+
+  header: {
+    backgroundColor: "#0B3D2E", paddingHorizontal: 16,
+    paddingTop: 12, paddingBottom: 16,
+    flexDirection: "row", alignItems: "center", gap: 8,
+  },
+  backBtn: { padding: 6 },
+  headerTitle: { fontSize: 18, fontFamily: "Poppins_700Bold", color: "#fff" },
+  headerSub: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#A8D96C", marginTop: 1 },
+  walletBtn: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    backgroundColor: "rgba(168,217,108,0.15)", paddingHorizontal: 10, paddingVertical: 6,
+    borderRadius: 20, borderWidth: 1, borderColor: "rgba(168,217,108,0.3)",
+  },
+  walletBtnText: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
 
   activeCard: {
     backgroundColor: "#0B3D2E", borderRadius: 20, padding: 20, marginBottom: 14, elevation: 4,
@@ -385,18 +417,20 @@ const s = StyleSheet.create({
   petChipText: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
 
   walletCard: {
-    flexDirection: "row", alignItems: "center", gap: 12,
     backgroundColor: "#fff", borderRadius: 14, padding: 14,
     marginBottom: 12, elevation: 2, borderWidth: 1, borderColor: "#D4EDD4",
+    flexDirection: "row", alignItems: "center", gap: 12,
   },
-  walletLabel: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#888" },
+  walletCardTop: { flex: 1 },
+  walletCardBottom: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 },
+  walletLabel: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#888", marginBottom: 2 },
   walletVal: { fontSize: 18, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
   addMoneyBtn: {
     flexDirection: "row", alignItems: "center", gap: 4,
-    backgroundColor: "#E8F5E8", paddingHorizontal: 12, paddingVertical: 7,
+    backgroundColor: "#E8F5E8", paddingHorizontal: 10, paddingVertical: 6,
     borderRadius: 20, borderWidth: 1, borderColor: "#D4EDD4",
   },
-  addMoneyText: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+  addMoneyText: { fontSize: 11, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
 
   warningBox: {
     flexDirection: "row", alignItems: "center", gap: 10,
@@ -471,9 +505,9 @@ const s = StyleSheet.create({
   costVal: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
 
   startBtn: {
-    backgroundColor: "#A8D96C", borderRadius: 14, padding: 16,
+    backgroundColor: "#A8D96C", borderRadius: 12, paddingVertical: 11, paddingHorizontal: 20,
     flexDirection: "row", alignItems: "center", justifyContent: "center",
-    gap: 8, elevation: 2, marginBottom: 10,
+    gap: 6, elevation: 2, marginBottom: 10, alignSelf: "center",
   },
   startBtnDis: { opacity: 0.45 },
   startBtnText: { fontSize: 15, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },

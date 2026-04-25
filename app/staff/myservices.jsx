@@ -6,6 +6,7 @@ import {
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
 
@@ -37,6 +38,7 @@ const EMOJI_CATEGORIES = [
 ];
 
 export default function StaffMyServices() {
+  const router = useRouter();
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -58,7 +60,7 @@ export default function StaffMyServices() {
       });
       const json = await res.json();
       if (json.success) setServices(json.visitTypes || []);
-    } catch (e) { console.log(e); }
+    } catch { }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 
@@ -159,9 +161,12 @@ export default function StaffMyServices() {
   const f = (key, val) => setForm((p) => ({ ...p, [key]: val }));
 
   return (
-    <View style={s.container}>
+    <KeyboardAvoidingView style={s.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       {/* Header */}
       <View style={s.header}>
+        <TouchableOpacity onPress={() => router.back()} style={s.backBtn} activeOpacity={0.8}>
+          <Ionicons name="close" size={24} color="#fff" />
+        </TouchableOpacity>
         <Text style={s.headerTitle}>My Services</Text>
         <TouchableOpacity
           style={s.addBtn}
@@ -207,10 +212,15 @@ export default function StaffMyServices() {
             </View>
             <View style={[s.summaryBox, { borderColor: "#3E7B27" }]}>
               <Ionicons name="cash-outline" size={18} color="#3E7B27" />
-              <Text style={[s.summaryVal, { color: "#3E7B27" }]}>
-                ₹{services.filter((s) => s.price).reduce((a, b) => a + (b.price || 0), 0) / (services.filter((s) => s.price).length || 1) | 0}
-              </Text>
-              <Text style={s.summaryLabel}>Avg Price</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.summaryVal, { color: "#3E7B27" }]} numberOfLines={1} adjustsFontSizeToFit>
+                  {(() => {
+                    const allPrices = services.flatMap(sv => (sv.priceTiers || []).map(t => Number(t.price) || 0)).filter(p => p > 0);
+                    return allPrices.length > 0 ? `₹${Math.round(allPrices.reduce((a, b) => a + b, 0) / allPrices.length)}` : "—";
+                  })()}
+                </Text>
+                <Text style={s.summaryLabel}>Avg Price</Text>
+              </View>
             </View>
           </View>
 
@@ -237,9 +247,6 @@ export default function StaffMyServices() {
                   <View style={s.cardActions}>
                     <TouchableOpacity style={s.editBtn} onPress={() => openEdit(item)} activeOpacity={0.8}>
                       <Ionicons name="pencil-outline" size={15} color="#3E7B27" />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={s.deleteBtn} onPress={() => handleDelete(item)} activeOpacity={0.8}>
-                      <Ionicons name="trash-outline" size={15} color="#C62828" />
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -282,6 +289,7 @@ export default function StaffMyServices() {
       {/* Add Modal */}
       <Modal visible={addModal} transparent animationType="slide" onRequestClose={() => setAddModal(false)}>
         <KeyboardAvoidingView style={s.overlay} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setAddModal(false)} />
           <View style={s.sheet}>
             <View style={s.sheetHeader}>
               <Text style={s.sheetTitle}>Add New Service</Text>
@@ -305,6 +313,7 @@ export default function StaffMyServices() {
       {/* Edit Modal */}
       <Modal visible={editModal} transparent animationType="slide" onRequestClose={() => setEditModal(false)}>
         <KeyboardAvoidingView style={s.overlay} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setEditModal(false)} />
           <View style={s.sheet}>
             <View style={s.sheetHeader}>
               <Text style={s.sheetTitle}>Edit Service</Text>
@@ -324,7 +333,7 @@ export default function StaffMyServices() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -565,9 +574,10 @@ const s = StyleSheet.create({
   header: {
     backgroundColor: "#0B3D2E", paddingHorizontal: 20,
     paddingTop: 52, paddingBottom: 16,
-    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+    flexDirection: "row", alignItems: "center", gap: 12,
   },
-  headerTitle: { fontSize: 20, fontFamily: "Poppins_700Bold", color: "#fff" },
+  headerTitle: { fontSize: 20, fontFamily: "Poppins_700Bold", color: "#fff", flex: 1 },
+  backBtn: { width: 36, height: 36, justifyContent: "center" },
   addBtn: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "#A8D96C", paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
   addBtnTxt: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
 

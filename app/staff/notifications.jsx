@@ -72,7 +72,7 @@ export default function StaffNotifications() {
       });
       const json = await res.json();
       if (json.success) setAlerts(json.alerts || []);
-    } catch (e) { console.log(e); }
+    } catch {}
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 
@@ -100,7 +100,6 @@ export default function StaffNotifications() {
     if (!alert.isRead) await markRead(alert._id);
 
     if (alert.alertType === "newBooking") {
-      // Appointments page pe navigate karo — wahan booking detail modal khulega
       router.push("/staff/appointments");
       return;
     }
@@ -120,7 +119,7 @@ export default function StaffNotifications() {
     <View style={s.container}>
       <View style={s.header}>
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
-          <Ionicons name="arrow-back" size={22} color="#fff" />
+          <Ionicons name="close" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={s.headerTitle}>Notifications</Text>
         {unreadCount > 0 ? (

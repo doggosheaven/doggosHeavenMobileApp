@@ -10,11 +10,16 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.doggosheaven.app"
+      "bundleIdentifier": "com.doggosheaven.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Allow Doggos Heaven to use your camera to take pet photos.",
+        "NSPhotoLibraryUsageDescription": "Allow Doggos Heaven to access your photos to upload pet pictures.",
+        "NSPhotoLibraryAddUsageDescription": "Allow Doggos Heaven to save photos to your library."
+      }
     },
     "android": {
       "package": "com.doggosheaven.app",
-      "versionCode": 3,
+      "versionCode": 4,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/doggoswhite.png",
         "backgroundColor": "#0B3D2E"
@@ -34,6 +39,16 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/doggoswhite.png",
+          "color": "#0B3D2E",
+          "sounds": [],
+          "androidMode": "default",
+          "androidCollapsedTitle": "Doggos Heaven"
+        }
+      ],
       [
         "expo-splash-screen",
         {

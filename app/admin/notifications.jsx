@@ -149,7 +149,7 @@ export default function AdminNotifications() {
       {/* Header */}
       <View style={s.header}>
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
-          <Ionicons name="arrow-back" size={22} color="#fff" />
+          <Ionicons name="close" size={22} color="#fff" />
         </TouchableOpacity>
         <Text style={s.headerTitle}>Notifications</Text>
         {unreadCount > 0 ? (
@@ -187,7 +187,7 @@ export default function AdminNotifications() {
               const cfg = getConfig(alert);
               const isClickable = alert.alertType === "newBooking"
                 ? !!alert.appointmentId
-                : ["serviceAction", "newPet", "inventoryStock"].includes(alert.alertType);
+                : ["newVisit", "serviceAction", "newPet", "inventoryStock"].includes(alert.alertType);
               return (
                 <TouchableOpacity
                   key={alert._id}
@@ -341,7 +341,7 @@ const s = StyleSheet.create({
     flexDirection: "row", justifyContent: "space-between", alignItems: "center",
   },
   backBtn: { width: 36, height: 36, justifyContent: "center" },
-  headerTitle: { fontSize: 18, fontFamily: "Poppins_700Bold", color: "#fff" },
+  headerTitle: { flex: 1, fontSize: 18, fontFamily: "Poppins_700Bold", color: "#fff", textAlign: "center" },
   markAllBtn: { paddingHorizontal: 8, paddingVertical: 4 },
   markAllTxt: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
   unreadBanner: {

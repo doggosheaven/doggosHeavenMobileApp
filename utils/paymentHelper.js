@@ -1,6 +1,13 @@
 import { Alert } from "react-native";
-import RazorpayCheckout from "react-native-razorpay";
 import { BASE_URL } from "../constants/api";
+
+let RazorpayCheckout = null;
+try {
+  const mod = require("react-native-razorpay");
+  RazorpayCheckout = mod?.default || mod;
+} catch {
+  // Not available in Expo Go
+}
 
 const GST_ONLINE = 0.18;
 const GST_CARD   = 0.20;
@@ -25,8 +32,8 @@ export async function initiatePayment({ appointmentId, amount, paymentMethod, se
     return;
   }
 
-  // GST-inclusive amount for Razorpay
-  const { total: totalWithGST } = calcGST(amount, paymentMethod || "online");
+  // amount is already GST-inclusive (saved as totalAmount in bookingform)
+  const totalWithGST = amount;
 
   try {
     const orderRes = await fetch(`${BASE_URL}/api/v1/customerappointment/createpaymentorder`, {
@@ -42,17 +49,13 @@ export async function initiatePayment({ appointmentId, amount, paymentMethod, se
     const orderId = orderData.order.id;
     const razorpayKey = orderData.key;
 
-    const { gst, total } = calcGST(amount, paymentMethod || "online");
-    const gstRate = getGSTRate(paymentMethod || "online");
-    const gstPercent = Math.round(gstRate * 100);
-
     const options = {
       key: razorpayKey,
       order_id: orderId,
       amount: totalWithGST * 100,
       currency: "INR",
       name: "Doggos Heaven",
-      description: `${serviceName || "Service"} | Base: ₹${amount} + GST ${gstPercent}%: ₹${gst} = ₹${total}`,
+      description: `${serviceName || "Service"} | Total (incl. GST): ₹${totalWithGST}`,
       prefill: {
         name: user?.fullName || user?.name || "",
         email: user?.email || "",
@@ -60,6 +63,10 @@ export async function initiatePayment({ appointmentId, amount, paymentMethod, se
     };
 
     // SDK returns payment IDs on success, throws on cancel/failure
+    if (!RazorpayCheckout) {
+      Alert.alert("Not Supported", "Online payment requires a development build. Please use a dev build to pay online.");
+      return;
+    }
     const paymentData = await RazorpayCheckout.open(options);
 
     // Verify payment on backend — this marks paymentStatus as "paid"
@@ -76,7 +83,7 @@ export async function initiatePayment({ appointmentId, amount, paymentMethod, se
     const verifyData = await verifyRes.json();
 
     if (verifyData.success) {
-      Alert.alert("Payment Successful! 🎉", `₹${total} paid (incl. GST ₹${gst}). Your booking is confirmed!`);
+      Alert.alert("Payment Successful! 🎉", `₹${totalWithGST} paid (GST inclusive). Your booking is confirmed!`);
       onSuccess?.();
     } else {
       Alert.alert("Verification Failed", verifyData.message || "Payment received but verification failed. Contact support.");

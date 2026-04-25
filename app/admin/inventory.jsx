@@ -6,6 +6,7 @@ import {
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
 
@@ -20,14 +21,19 @@ const emptyForm = () => ({
   volumeML: "", alertThreshold: "",
 });
 
+let _cachedInventory = null;
+let _cachedAlertList = null;
+let _cachedInvToken = "";
+
 export default function StaffInventory() {
+  const router = useRouter();
   const [tab, setTab] = useState("All Items");
-  const [inventory, setInventory] = useState([]);
-  const [alertList, setAlertList] = useState([]);
+  const [inventory, setInventory] = useState(_cachedInventory || []);
+  const [alertList, setAlertList] = useState(_cachedAlertList || []);
   const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!_cachedInventory);
   const [refreshing, setRefreshing] = useState(false);
-  const [token, setToken] = useState("");
+  const [token, setToken] = useState(_cachedInvToken);
 
   const [addModal, setAddModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
@@ -161,8 +167,11 @@ export default function StaffInventory() {
   const f = (key, val) => setForm((p) => ({ ...p, [key]: val }));
 
   return (
-    <View style={s.container}>
+    <KeyboardAvoidingView style={s.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <View style={s.header}>
+        <TouchableOpacity onPress={() => router.back()} style={s.backBtn} activeOpacity={0.8}>
+          <Ionicons name="close" size={22} color="#fff" />
+        </TouchableOpacity>
         <Text style={s.headerTitle}>Inventory</Text>
         <TouchableOpacity style={s.addBtn} onPress={() => { setForm(emptyForm()); setAddModal(true); }} activeOpacity={0.8}>
           <Ionicons name="add" size={18} color="#0B3D2E" />
@@ -301,7 +310,12 @@ export default function StaffInventory() {
 
       {/* Add / Edit Item Modal */}
       <Modal visible={addModal} transparent animationType="slide" onRequestClose={() => { setAddModal(false); setEditItem(null); }}>
-        <KeyboardAvoidingView style={s.overlay} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+        <KeyboardAvoidingView
+          style={s.overlay}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={0}
+        >
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => {}} />
           <View style={[s.sheet, { maxHeight: "92%" }]}>
             <View style={s.sheetHeader}>
               <Text style={s.sheetTitle}>{editItem ? "Edit Item" : "Add Inventory Item"}</Text>
@@ -368,7 +382,7 @@ export default function StaffInventory() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -377,9 +391,10 @@ const s = StyleSheet.create({
   header: {
     backgroundColor: "#0B3D2E", paddingHorizontal: 20,
     paddingTop: 52, paddingBottom: 16,
-    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+    flexDirection: "row", alignItems: "center",
   },
-  headerTitle: { fontSize: 20, fontFamily: "Poppins_700Bold", color: "#fff" },
+  backBtn: { width: 36, height: 36, justifyContent: "center" },
+  headerTitle: { flex: 1, fontSize: 20, fontFamily: "Poppins_700Bold", color: "#fff", textAlign: "center" },
   addBtn: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "#A8D96C", paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20 },
   addBtnTxt: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
 

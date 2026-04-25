@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
-  ScrollView, Alert, ActivityIndicator, Image,
+  ScrollView, Alert, ActivityIndicator, Image, KeyboardAvoidingView, Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
@@ -21,7 +21,7 @@ export default function EditProfileScreen() {
     getAuth().then(({ user }) => {
       if (user) {
         setForm({ fullName: user.fullName || "", phone: user.phone || "" });
-        if (user.profileImage) setImage(user.profileImage);
+        if (user.profilePhoto || user.profileImage) setImage(user.profilePhoto || user.profileImage);
       }
       setInitialized(true);
     });
@@ -72,7 +72,8 @@ export default function EditProfileScreen() {
           ...user,
           fullName: form.fullName.trim(),
           phone: form.phone.trim(),
-          profileImage: image || user?.profileImage || null,
+          profilePhoto: image || user?.profilePhoto || user?.profileImage || null,
+          profileImage: image || user?.profilePhoto || user?.profileImage || null,
         });
         Alert.alert("Success", "Profile updated successfully!", [
           { text: "OK", onPress: () => router.replace("/(tabs)/profile") },
@@ -90,7 +91,7 @@ export default function EditProfileScreen() {
   if (!initialized) return <View style={styles.container}><ActivityIndicator size="large" color="#0B3D2E" style={{ flex: 1 }} /></View>;
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <Header title="Edit Profile" showBack />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
@@ -157,13 +158,13 @@ export default function EditProfileScreen() {
         </TouchableOpacity>
 
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F0F7F0" },
-  scroll: { padding: 20, paddingBottom: 40 },
+  scroll: { padding: 20, paddingBottom: 100 },
 
   avatarSection: { alignItems: "center", marginBottom: 28 },
   avatarWrapper: { position: "relative" },

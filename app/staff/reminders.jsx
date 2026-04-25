@@ -1,11 +1,11 @@
 import { useState, useCallback, useRef } from "react";
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  ActivityIndicator, RefreshControl, Alert, Platform,
+  ActivityIndicator, RefreshControl, Alert, FlatList, Modal,
 } from "react-native";
-import DateTimePicker from "@react-native-community/datetimepicker";
 import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
 
@@ -15,8 +15,84 @@ const fmtDisplay = (d) =>
   d.toLocaleDateString("en-IN", { weekday: "short", day: "2-digit", month: "short", year: "numeric" });
 
 const TABS = ["Reminders", "Attendance"];
+const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const DAY_NAMES = ["Su","Mo","Tu","We","Th","Fr","Sa"];
+
+function CalendarModal({ visible, selectedDate, onSelect, onClose }) {
+  const [calMonth, setCalMonth] = useState(selectedDate || new Date());
+  const year = calMonth.getFullYear();
+  const month = calMonth.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstDay = new Date(year, month, 1).getDay();
+  const isSameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
+  const calDays = [...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <TouchableOpacity style={cs.overlay} activeOpacity={1} onPress={onClose}>
+        <TouchableOpacity activeOpacity={1} style={cs.box}>
+          <View style={cs.header}>
+            <TouchableOpacity onPress={() => setCalMonth(new Date(year, month - 1, 1))} hitSlop={{ top:8,bottom:8,left:8,right:8 }}>
+              <Ionicons name="chevron-back" size={20} color="#0B3D2E" />
+            </TouchableOpacity>
+            <Text style={cs.monthTxt}>{MONTH_NAMES[month]} {year}</Text>
+            <TouchableOpacity onPress={() => setCalMonth(new Date(year, month + 1, 1))} hitSlop={{ top:8,bottom:8,left:8,right:8 }}>
+              <Ionicons name="chevron-forward" size={20} color="#0B3D2E" />
+            </TouchableOpacity>
+          </View>
+          <View style={cs.dayRow}>
+            {DAY_NAMES.map(d => <Text key={d} style={cs.dayName}>{d}</Text>)}
+          </View>
+          <FlatList
+            data={calDays}
+            numColumns={7}
+            keyExtractor={(_, i) => String(i)}
+            scrollEnabled={false}
+            renderItem={({ item: day }) => {
+              if (!day) return <View style={cs.dayEmpty} />;
+              const thisDate = new Date(year, month, day);
+              const isSelected = selectedDate && isSameDay(thisDate, selectedDate);
+              const isToday = isSameDay(thisDate, new Date());
+              return (
+                <TouchableOpacity
+                  style={[cs.day, isSelected && cs.daySelected, isToday && !isSelected && cs.dayToday]}
+                  onPress={() => { onSelect(thisDate); onClose(); }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[cs.dayTxt, isSelected && cs.dayTxtSelected, isToday && !isSelected && cs.dayTxtToday]}>{day}</Text>
+                </TouchableOpacity>
+              );
+            }}
+          />
+          <TouchableOpacity style={cs.todayBtn} onPress={() => { onSelect(new Date()); onClose(); }} activeOpacity={0.8}>
+            <Text style={cs.todayBtnTxt}>Go to Today</Text>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+  );
+}
+
+const cs = StyleSheet.create({
+  overlay: { flex:1, backgroundColor:"rgba(0,0,0,0.45)", justifyContent:"center", alignItems:"center" },
+  box: { backgroundColor:"#fff", borderRadius:20, padding:20, width:"88%", elevation:10 },
+  header: { flexDirection:"row", justifyContent:"space-between", alignItems:"center", marginBottom:14 },
+  monthTxt: { fontSize:16, fontFamily:"Poppins_700Bold", color:"#0B3D2E" },
+  dayRow: { flexDirection:"row", marginBottom:6 },
+  dayName: { flex:1, textAlign:"center", fontSize:11, fontFamily:"Poppins_700Bold", color:"#3E7B27" },
+  day: { flex:1, aspectRatio:1, justifyContent:"center", alignItems:"center", borderRadius:8, margin:1 },
+  dayEmpty: { flex:1, aspectRatio:1, margin:1 },
+  daySelected: { backgroundColor:"#0B3D2E" },
+  dayToday: { backgroundColor:"#E8F5E8", borderWidth:1.5, borderColor:"#3E7B27" },
+  dayTxt: { fontSize:13, fontFamily:"Inter_400Regular", color:"#1A1A1A" },
+  dayTxtSelected: { fontFamily:"Poppins_700Bold", color:"#A8D96C" },
+  dayTxtToday: { fontFamily:"Poppins_700Bold", color:"#0B3D2E" },
+  todayBtn: { backgroundColor:"#0B3D2E", borderRadius:12, paddingVertical:12, alignItems:"center", marginTop:14 },
+  todayBtnTxt: { fontSize:14, fontFamily:"Poppins_700Bold", color:"#A8D96C" },
+});
 
 export default function StaffReminders() {
+  const router = useRouter();
   const [tab, setTab] = useState("Reminders");
   const [date, setDate] = useState(new Date());
   const [reminderList, setReminderList] = useState([]);
@@ -64,7 +140,7 @@ export default function StaffReminders() {
         items.forEach((i) => { map[i._id] = i.present ?? false; });
         setPresentMap(map);
       }
-    } catch (e) { console.log(e); }
+    } catch { }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 
@@ -156,8 +232,14 @@ export default function StaffReminders() {
     <View style={s.container}>
       {/* Header */}
       <View style={s.header}>
+        <TouchableOpacity onPress={() => router.back()} style={s.backBtn} activeOpacity={0.8}>
+          <Ionicons name="close" size={24} color="#fff" />
+        </TouchableOpacity>
         <Text style={s.headerTitle}>Reminders</Text>
-        <Text style={s.headerSub}>{fmtDisplay(date)}</Text>
+        <TouchableOpacity style={s.calIconBtn} onPress={() => setShowPicker(true)} activeOpacity={0.8}>
+          <Ionicons name="calendar-outline" size={22} color="#A8D96C" />
+          {!isToday && <View style={s.calDot} />}
+        </TouchableOpacity>
       </View>
 
       {/* Tabs */}
@@ -172,43 +254,13 @@ export default function StaffReminders() {
         ))}
       </View>
 
-      {/* Date Navigator */}
-      <View style={s.dateNav}>
-        <TouchableOpacity style={s.navBtn} onPress={() => changeDate(-1)} activeOpacity={0.8}>
-          <Ionicons name="chevron-back" size={20} color="#0B3D2E" />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={s.dateCenter} onPress={() => setShowPicker(true)} activeOpacity={0.8}>
-          <View style={s.dateTouchable}>
-            <Ionicons name="calendar-outline" size={15} color="#0B3D2E" />
-            <Text style={s.dateText}>{fmtDisplay(date)}</Text>
-          </View>
-          {isToday && <View style={s.todayBadge}><Text style={s.todayTxt}>Today</Text></View>}
-        </TouchableOpacity>
-
-        <TouchableOpacity style={s.navBtn} onPress={() => changeDate(1)} activeOpacity={0.8}>
-          <Ionicons name="chevron-forward" size={20} color="#0B3D2E" />
-        </TouchableOpacity>
-      </View>
-
-      {/* Calendar Picker */}
-      {showPicker && (
-        <DateTimePicker
-          value={date}
-          mode="date"
-          display={Platform.OS === "ios" ? "inline" : "calendar"}
-          onChange={(event, selected) => {
-            setShowPicker(Platform.OS === "ios");
-            if (event.type === "dismissed") { setShowPicker(false); return; }
-            if (selected) {
-              setShowPicker(false);
-              setDate(selected);
-              load(selected, tabRef.current);
-            }
-          }}
-          maximumDate={new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)}
-        />
-      )}
+      {/* Calendar Modal */}
+      <CalendarModal
+        visible={showPicker}
+        selectedDate={date}
+        onSelect={(d) => { setDate(d); load(d, tabRef.current); }}
+        onClose={() => setShowPicker(false)}
+      />
 
       {loading ? (
         <ActivityIndicator size="large" color="#0B3D2E" style={{ flex: 1 }} />
@@ -393,10 +445,20 @@ const s = StyleSheet.create({
   header: {
     backgroundColor: "#0B3D2E", paddingHorizontal: 20,
     paddingTop: 52, paddingBottom: 16,
-    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+    flexDirection: "row", alignItems: "center", gap: 10,
   },
-  headerTitle: { fontSize: 20, fontFamily: "Poppins_700Bold", color: "#fff" },
-  headerSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#A8D96C" },
+  headerTitle: { fontSize: 20, fontFamily: "Poppins_700Bold", color: "#fff", flex: 1 },
+  backBtn: { width: 36, height: 36, justifyContent: "center" },
+  headerSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#A8D96C", marginTop: 2 },
+  calIconBtn: {
+    position: "relative", padding: 8,
+    backgroundColor: "rgba(168,217,108,0.15)", borderRadius: 12,
+  },
+  calDot: {
+    position: "absolute", top: 5, right: 5,
+    width: 7, height: 7, borderRadius: 4,
+    backgroundColor: "#F59E0B", borderWidth: 1, borderColor: "#0B3D2E",
+  },
 
   tabRow: {
     flexDirection: "row", backgroundColor: "#fff",
@@ -406,25 +468,6 @@ const s = StyleSheet.create({
   tabActive: { borderBottomWidth: 2, borderBottomColor: "#0B3D2E" },
   tabTxt: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#999" },
   tabTxtActive: { fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
-
-  dateNav: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    backgroundColor: "#fff", paddingHorizontal: 16, paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: "#D4EDD4",
-  },
-  navBtn: {
-    width: 36, height: 36, borderRadius: 10,
-    backgroundColor: "#E8F5E8", justifyContent: "center", alignItems: "center",
-  },
-  dateCenter: { alignItems: "center", gap: 4 },
-  dateTouchable: {
-    flexDirection: "row", alignItems: "center", gap: 6,
-    backgroundColor: "#E8F5E8", paddingHorizontal: 14, paddingVertical: 7,
-    borderRadius: 20, borderWidth: 1, borderColor: "#A8D96C",
-  },
-  dateText: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
-  todayBadge: { backgroundColor: "#0B3D2E", paddingHorizontal: 10, paddingVertical: 2, borderRadius: 10 },
-  todayTxt: { fontSize: 10, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
 
   scroll: { padding: 16, paddingBottom: 40 },
 

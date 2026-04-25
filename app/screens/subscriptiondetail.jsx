@@ -4,15 +4,18 @@ import {
   TextInput, Alert, ActivityIndicator,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
+import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import RazorpayCheckout from "react-native-razorpay";
-import Header from "../../components/Header";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
+
+let RazorpayCheckout = null;
+try { RazorpayCheckout = require("react-native-razorpay").default; } catch {}
 
 const QUICK_AMOUNTS = [500, 1000, 2000, 5000, 11500];
 
 export default function SubscriptionDetailScreen() {
+  const router = useRouter();
   const [auth, setAuth] = useState({});
   const [wallet, setWallet] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -97,7 +100,13 @@ export default function SubscriptionDetailScreen() {
 
   return (
     <View style={s.container}>
-      <Header title="Boarding Subscription" />
+      <View style={s.header}>
+        <TouchableOpacity onPress={() => router.back()} style={s.backBtn} activeOpacity={0.8}>
+          <Ionicons name="arrow-back" size={22} color="#fff" />
+        </TouchableOpacity>
+        <Text style={s.headerTitle}>Boarding Subscription</Text>
+        <View style={{ width: 36 }} />
+      </View>
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
 
         {/* Hero Plan Card */}
@@ -236,6 +245,14 @@ const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F0F7F0" },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   scroll: { padding: 16, paddingBottom: 48 },
+
+  header: {
+    backgroundColor: "#0B3D2E", paddingHorizontal: 16,
+    paddingTop: 12, paddingBottom: 16,
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+  },
+  backBtn: { width: 36, height: 36, justifyContent: "center" },
+  headerTitle: { fontSize: 18, fontFamily: "Poppins_700Bold", color: "#fff", flex: 1, textAlign: "center" },
 
   hero: {
     backgroundColor: "#0B3D2E", borderRadius: 20, padding: 28,

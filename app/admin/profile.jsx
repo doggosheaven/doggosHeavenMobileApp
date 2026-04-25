@@ -1,11 +1,12 @@
 import { useState, useCallback } from "react";
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert,
-  Modal, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform,
+  Modal, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, Image,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import * as ImagePicker from "expo-image-picker";
 import { getAuth, clearAuth, saveAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
 
@@ -16,6 +17,7 @@ export default function AdminProfile() {
   const [editModal, setEditModal] = useState(false);
   const [form, setForm] = useState({ fullName: "", phone: "" });
   const [saving, setSaving] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   useFocusEffect(useCallback(() => {
     getAuth().then(({ user: u, token: t }) => {
@@ -27,6 +29,57 @@ export default function AdminProfile() {
   const getInitials = (name) => {
     if (!name) return "A";
     return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
+  };
+
+  const handlePickPhoto = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission needed", "Allow photo access to update profile picture.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true, aspect: [1, 1], quality: 0.7,
+    });
+    if (result.canceled) return;
+    const uri = result.assets[0].uri;
+    setUploadingPhoto(true);
+    try {
+      const formData = new FormData();
+      formData.append("profilePhoto", { uri, name: "profile.jpg", type: "image/jpeg" });
+      const res = await fetch(`${BASE_URL}/api/v1/auth/updateprofilephoto`, {
+        method: "PUT",
+        headers: { Authorization: token },
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.success) {
+        const updated = { ...user, profilePhoto: data.profilePhoto || uri };
+        await saveAuth(token, updated);
+        setUser(updated);
+        Alert.alert("✅ Done", "Profile photo updated!");
+      } else {
+        const updated = { ...user, profilePhoto: uri };
+        await saveAuth(token, updated);
+        setUser(updated);
+      }
+    } catch {
+      const updated = { ...user, profilePhoto: uri };
+      await saveAuth(token, updated);
+      setUser(updated);
+    } finally { setUploadingPhoto(false); }
+  };
+
+  const handlePhotoOptions = () => {
+    Alert.alert("Profile Photo", "Choose an option", [
+      { text: "Choose from Gallery", onPress: handlePickPhoto },
+      { text: "Remove Photo", style: "destructive", onPress: async () => {
+        const updated = { ...user, profilePhoto: null };
+        await saveAuth(token, updated);
+        setUser(updated);
+      }},
+      { text: "Cancel", style: "cancel" },
+    ]);
   };
 
   const openEdit = () => {
@@ -88,13 +141,23 @@ export default function AdminProfile() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
         {/* Avatar Card */}
         <View style={styles.avatarCard}>
-          <TouchableOpacity style={styles.avatarWrapper} onPress={openEdit} activeOpacity={0.8}>
-            <View style={styles.avatarCircle}>
-              <Text style={styles.avatarText}>{getInitials(user?.fullName)}</Text>
-            </View>
-            <View style={styles.editBadge}>
-              <Ionicons name="pencil" size={11} color="#0B3D2E" />
-            </View>
+          <TouchableOpacity style={styles.avatarWrapper} onPress={handlePhotoOptions} activeOpacity={0.8}>
+            {user?.profilePhoto ? (
+              <Image source={{ uri: user.profilePhoto }} style={styles.avatarCircle} />
+            ) : (
+              <View style={styles.avatarCircle}>
+                <Text style={styles.avatarText}>{getInitials(user?.fullName)}</Text>
+              </View>
+            )}
+            {uploadingPhoto ? (
+              <View style={styles.editBadge}>
+                <ActivityIndicator size="small" color="#0B3D2E" />
+              </View>
+            ) : (
+              <View style={styles.editBadge}>
+                <Ionicons name="camera" size={11} color="#0B3D2E" />
+              </View>
+            )}
           </TouchableOpacity>
           <Text style={styles.userName}>{user?.fullName || "Admin"}</Text>
           <Text style={styles.userEmail}>{user?.email || ""}</Text>
@@ -238,6 +301,7 @@ const styles = StyleSheet.create({
     width: 80, height: 80, borderRadius: 40,
     backgroundColor: "#A8D96C",
     justifyContent: "center", alignItems: "center",
+    overflow: "hidden",
   },
   editBadge: {
     position: "absolute", bottom: 0, right: 0,

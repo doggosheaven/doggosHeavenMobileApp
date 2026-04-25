@@ -1,13 +1,13 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
   ActivityIndicator, RefreshControl, TextInput, Modal,
   KeyboardAvoidingView, Platform, Alert,
 } from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
-import { getAuth } from "../../utils/authStorage";
+import { useRouter } from "expo-router";
 import { BASE_URL } from "../../constants/api";
+import { useStaff } from "../../context/StaffContext";
 
 const TABS = ["All Items", "Alert List"];
 const ITEM_TYPES = ["disposable", "injection", "medicine", "vaccine"];
@@ -21,38 +21,27 @@ const emptyForm = () => ({
 });
 
 export default function StaffInventory() {
+  const router = useRouter();
   const [tab, setTab] = useState("All Items");
-  const [inventory, setInventory] = useState([]);
-  const [alertList, setAlertList] = useState([]);
   const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [token, setToken] = useState("");
-
   const [addModal, setAddModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [viewModal, setViewModal] = useState(false);
   const [viewItem, setViewItem] = useState(null);
   const [form, setForm] = useState(emptyForm());
   const [saving, setSaving] = useState(false);
+  const { inventory, setInventory, alertList, setAlertList, token, loadInventory } = useStaff();
 
-  const loadInventory = useCallback(async () => {
-    try {
-      const { token: t } = await getAuth();
-      setToken(t || "");
-      const [invRes, alertRes] = await Promise.all([
-        fetch(`${BASE_URL}/api/v1/inventory/getallinventory`, { headers: { Authorization: t || "" } }),
-        fetch(`${BASE_URL}/api/v1/inventory/getalertlist`, { headers: { Authorization: t || "" } }),
-      ]);
-      const invJson = await invRes.json();
-      const alertJson = await alertRes.json();
-      if (invJson.success) setInventory(invJson.items || []);
-      if (alertJson.success) setAlertList(alertJson.items || alertJson.alertList || []);
-    } catch (e) { console.log(e); }
-    finally { setLoading(false); setRefreshing(false); }
-  }, []);
+  const loading = inventory.length === 0 && !refreshing;
 
-  useFocusEffect(useCallback(() => { loadInventory(); }, []));
+  useEffect(() => { loadInventory(); }, [loadInventory]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadInventory(true);
+    setRefreshing(false);
+  };
 
   const handleAdd = async () => {
     if (!form.itemName.trim()) return Alert.alert("Error", "Item name is required.");
@@ -77,7 +66,7 @@ export default function StaffInventory() {
       if (json.success) {
         setAddModal(false);
         setForm(emptyForm());
-        loadInventory();
+        loadInventory(true);
         Alert.alert("✅ Added", "Inventory item added successfully.");
       } else Alert.alert("Error", json.message);
     } catch { Alert.alert("Error", "Network error"); }
@@ -129,7 +118,7 @@ export default function StaffInventory() {
         setAddModal(false);
         setEditItem(null);
         setForm(emptyForm());
-        loadInventory();
+        loadInventory(true);
         Alert.alert("✅ Updated", "Inventory item updated successfully.");
       } else Alert.alert("Error", json.message);
     } catch { Alert.alert("Error", "Network error"); }
@@ -161,8 +150,11 @@ export default function StaffInventory() {
   const f = (key, val) => setForm((p) => ({ ...p, [key]: val }));
 
   return (
-    <View style={s.container}>
+    <KeyboardAvoidingView style={s.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <View style={s.header}>
+        <TouchableOpacity onPress={() => router.back()} style={s.backBtn} activeOpacity={0.8}>
+          <Ionicons name="close" size={24} color="#fff" />
+        </TouchableOpacity>
         <Text style={s.headerTitle}>Inventory</Text>
         <TouchableOpacity style={s.addBtn} onPress={() => { setForm(emptyForm()); setAddModal(true); }} activeOpacity={0.8}>
           <Ionicons name="add" size={18} color="#0B3D2E" />
@@ -298,7 +290,8 @@ export default function StaffInventory() {
 
       {/* Add / Edit Item Modal */}
       <Modal visible={addModal} transparent animationType="slide" onRequestClose={() => { setAddModal(false); setEditItem(null); }}>
-        <KeyboardAvoidingView style={s.overlay} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+        <KeyboardAvoidingView style={s.overlay} behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={0}>
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => {}} />
           <View style={[s.sheet, { maxHeight: "92%" }]}>
             <View style={s.sheetHeader}>
               <Text style={s.sheetTitle}>{editItem ? "Edit Item" : "Add Inventory Item"}</Text>
@@ -365,7 +358,7 @@ export default function StaffInventory() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -374,9 +367,10 @@ const s = StyleSheet.create({
   header: {
     backgroundColor: "#0B3D2E", paddingHorizontal: 20,
     paddingTop: 52, paddingBottom: 16,
-    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+    flexDirection: "row", alignItems: "center", gap: 12,
   },
-  headerTitle: { fontSize: 20, fontFamily: "Poppins_700Bold", color: "#fff" },
+  backBtn: { width: 36, height: 36, justifyContent: "center" },
+  headerTitle: { fontSize: 20, fontFamily: "Poppins_700Bold", color: "#fff", flex: 1 },
   addBtn: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "#A8D96C", paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20 },
   addBtnTxt: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
 

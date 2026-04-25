@@ -5,6 +5,7 @@ import {
 import { useState } from "react";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import * as Notifications from "expo-notifications";
 import { BASE_URL } from "../../constants/api";
 import { saveAuth } from "../../utils/authStorage";
 
@@ -358,19 +359,20 @@ export default function LoginScreen() {
     }
     setLoading(true);
     try {
+      const normalizedEmail = email.trim().toLowerCase();
       let data;
       if (role === "staff") {
         const r1 = await fetch(`${BASE_URL}/api/v1/auth/login`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: email.trim(), password, role: "staff" }),
+          body: JSON.stringify({ email: normalizedEmail, password, role: "staff" }),
         });
         data = await r1.json();
         if (!data.success) {
           const r2 = await fetch(`${BASE_URL}/api/v1/auth/login`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email: email.trim(), password, role: "admin" }),
+            body: JSON.stringify({ email: normalizedEmail, password, role: "admin" }),
           });
           data = await r2.json();
         }
@@ -378,13 +380,28 @@ export default function LoginScreen() {
         const res = await fetch(`${BASE_URL}/api/v1/auth/login`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: email.trim(), password, role: "customer" }),
+          body: JSON.stringify({ email: normalizedEmail, password, role: "customer" }),
         });
         data = await res.json();
       }
 
       if (data.success) {
         await saveAuth(data.token, data.user);
+        // Push token register for buzzer
+        try {
+          const { status } = await Notifications.requestPermissionsAsync();
+          if (status === "granted") {
+            const tokenData = await Notifications.getExpoPushTokenAsync();
+            const pushToken = tokenData.data;
+            if (pushToken && data.user?.id) {
+              fetch(`${BASE_URL}/api/v1/customerappointment/savepushtoken`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userId: data.user.id, expoPushToken: pushToken }),
+              }).catch(() => {});
+            }
+          }
+        } catch {}
         const actualRole = data.user?.role;
         if (actualRole === "admin")      router.replace("/admin/dashboard");
         else if (actualRole === "staff") router.replace("/staff/dashboard");

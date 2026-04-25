@@ -7,8 +7,6 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getAuth } from "../utils/authStorage";
 import { BASE_URL } from "../constants/api";
 
-const NOTIF_READ_KEY = "notif_read_ids";
-
 export default function Header({ showBack = false, title = null }) {
   const router = useRouter();
   const [unreadCount, setUnreadCount] = useState(0);
@@ -19,16 +17,16 @@ export default function Header({ showBack = false, title = null }) {
       try {
         const { user, token } = await getAuth();
         if (!user?.id) return;
+        const key = `notif_read_ids_${user.id}`;
         const [res, stored] = await Promise.all([
           fetch(`${BASE_URL}/api/v1/customerappointment/notifications/${user.id}`,
             { headers: { Authorization: token || "" } }),
-          AsyncStorage.getItem(NOTIF_READ_KEY),
+          AsyncStorage.getItem(key),
         ]);
         const data = await res.json();
         if (!data.success) return;
         const persistedIds = new Set(stored ? JSON.parse(stored) : []);
         const notifs = data.notifications || [];
-        // visit notifs: use server read field; appointment notifs: use AsyncStorage
         const unread = notifs.filter((n) => {
           if (n.source === 'visit') return n.read === false;
           return !persistedIds.has(String(n.id));
@@ -59,7 +57,7 @@ export default function Header({ showBack = false, title = null }) {
       <View style={styles.left}>
         {showBack ? (
           <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
-            <Text style={styles.backArrow}>✕</Text>
+            <Ionicons name="close" size={24} color="#fff" />
           </TouchableOpacity>
         ) : (
           <Image source={require("../assets/images/doggoswhite.png")} style={styles.logoImg} resizeMode="contain" />
@@ -68,7 +66,7 @@ export default function Header({ showBack = false, title = null }) {
 
       {/* Center */}
       <View style={styles.center}>
-        <Text style={styles.appName}>{title ?? "DoggosHeaven"}</Text>
+        <Text style={styles.appName} numberOfLines={1} adjustsFontSizeToFit>{title ?? "DoggosHeaven"}</Text>
         {!title && <Text style={styles.tagline}>Happy Pets, Happy You 🐾</Text>}
       </View>
 
@@ -98,7 +96,8 @@ const styles = StyleSheet.create({
   container: {
     backgroundColor: "#0B3D2E",
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: 12,
+    paddingBottom: 12,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -140,10 +139,6 @@ const styles = StyleSheet.create({
     color: "#7BC743",
     letterSpacing: 1,
     textTransform: "uppercase",
-  },
-  backArrow: {
-    fontSize: 22,
-    color: "#FFFFFF",
   },
   iconBtn: {
     padding: 4,
