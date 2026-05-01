@@ -8,7 +8,6 @@ import { Ionicons } from "@expo/vector-icons";
 import Header from "../../components/Header";
 import { useApp } from "../../context/AppContext";
 import { BASE_URL } from "../../constants/api";
-import { initiatePayment } from "../../utils/paymentHelper";
 
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const DAY_NAMES = ["Su","Mo","Tu","We","Th","Fr","Sa"];
@@ -32,7 +31,6 @@ export default function BookingsScreen() {
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState("All");
-  const [payingId, setPayingId] = useState(null);
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [showCalModal, setShowCalModal] = useState(false);
   const [selectedDate, setSelectedDate] = useState(null);
@@ -49,20 +47,13 @@ export default function BookingsScreen() {
     setRefreshing(false);
   };
 
-  const handlePayNow = async (appt, e) => {
+  const handlePayNow = (appt, e) => {
     e?.stopPropagation?.();
-    setPayingId(appt._id);
-    await initiatePayment({
-      appointmentId: appt._id,
-      amount: appt.totalAmount,
-      paymentMethod: appt.paymentMode || "online",
-      serviceName: appt.serviceName,
-      user,
-      token,
-      onSuccess: () => loadAppointments(true),
-      onRefresh: () => loadAppointments(true),
-    });
-    setPayingId(null);
+    Alert.alert(
+      "\u23f3 Payment Awaiting",
+      "Please coordinate with our staff to complete the payment of \u20b9" + appt.totalAmount + " for " + appt.serviceName + ".\n\nVisit the clinic or contact us directly.",
+      [{ text: "OK" }]
+    );
   };
 
   const handleCancel = (id, e) => {
@@ -282,7 +273,6 @@ export default function BookingsScreen() {
         ) : (
           filtered.map((appt) => {
             const status = STATUS_CONFIG[appt.status] || STATUS_CONFIG.pending;
-            const isPaying = payingId === appt._id;
             return (
               <TouchableOpacity
                 key={appt._id}
@@ -341,17 +331,10 @@ export default function BookingsScreen() {
                       style={styles.payInline}
                       onPress={(e) => handlePayNow(appt, e)}
                       activeOpacity={0.85}
-                      disabled={isPaying}
                     >
-                      {isPaying ? (
-                        <ActivityIndicator size="small" color="#0B3D2E" />
-                      ) : (
-                        <Ionicons name="card" size={14} color="#0B3D2E" />
-                      )}
-                      <Text style={styles.payInlineText}>
-                        {isPaying ? "Opening..." : `Pay ₹${appt.totalAmount}`}
-                      </Text>
-                      {!isPaying && <Ionicons name="chevron-forward" size={13} color="#0B3D2E" style={{ marginLeft: "auto" }} />}
+                      <Ionicons name="card" size={14} color="#0B3D2E" />
+                      <Text style={styles.payInlineText}>Pay ₹{appt.totalAmount}</Text>
+                      <Ionicons name="chevron-forward" size={13} color="#0B3D2E" style={{ marginLeft: "auto" }} />
                     </TouchableOpacity>
                   )}
 

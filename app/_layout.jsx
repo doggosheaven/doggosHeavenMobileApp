@@ -106,7 +106,7 @@ export default function TabLayout() {
 
   return (
     <AppProvider>
-      <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
+      <View style={{ flex: 1, backgroundColor: "#0B3D2E" }} onLayout={onLayoutRootView}>
         <Stack screenOptions={{ headerShown: false, gestureEnabled: true, gestureDirection: "horizontal" }} />
       </View>
     </AppProvider>

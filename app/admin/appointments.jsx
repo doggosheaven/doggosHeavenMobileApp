@@ -639,7 +639,7 @@ export default function AdminAppointments() {
               <View style={styles.detailSection}>
                 <Text style={styles.detailSectionTitle}>Payment Info</Text>
                 <DetailRow icon="cash-outline" label="Amount" value={detailAppt.totalAmount > 0 ? `₹${detailAppt.totalAmount}` : "Price on Request"} />
-                {detailAppt.gstAmount > 0 && <DetailRow icon="receipt-outline" label="GST" value={`₹${detailAppt.gstAmount}`} />}
+                {/* GST disabled: {detailAppt.gstAmount > 0 && <DetailRow icon="receipt-outline" label="GST" value={`₹${detailAppt.gstAmount}`} />} */}
                 <DetailRow icon="card-outline" label="Payment Mode" value={detailAppt.paymentMode || "—"} />
                 <DetailRow icon="checkmark-circle-outline" label="Payment Status" value={detailAppt.paymentStatus} />
                 {detailAppt.ambulanceRequired && (

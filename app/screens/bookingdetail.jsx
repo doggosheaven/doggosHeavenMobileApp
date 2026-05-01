@@ -1,7 +1,7 @@
 import { useState } from "react";
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  Alert, ActivityIndicator,
+  Alert,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -20,7 +20,6 @@ export default function BookingDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { user, token, appointments, loadAppointments, setAppointments } = useApp();
-  const [payingId, setPayingId] = useState(null);
 
   const appt = appointments.find((a) => a._id === params.id);
 
@@ -55,19 +54,8 @@ export default function BookingDetailScreen() {
     return date.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true });
   };
 
-  const handlePayNow = async () => {
-    setPayingId(appt._id);
-    await initiatePayment({
-      appointmentId: appt._id,
-      amount: appt.totalAmount,
-      paymentMethod: appt.paymentMode || "online",
-      serviceName: appt.serviceName,
-      user,
-      token,
-      onSuccess: () => loadAppointments(true),
-      onRefresh: () => loadAppointments(true),
-    });
-    setPayingId(null);
+  const handlePayNow = () => {
+    initiatePayment({ serviceName: appt.serviceName });
   };
 
   const handleCancel = () => {
@@ -200,8 +188,10 @@ export default function BookingDetailScreen() {
             </View>
             <Text style={styles.cardTitle}>Payment Summary</Text>
           </View>
+          {/* GST disabled
           {subtotal > 0 && <Row label="Subtotal" value={`₹${subtotal}`} />}
           {appt.gstAmount > 0 && <Row label="GST (18%)" value={`₹${appt.gstAmount}`} warn />}
+          */}
           <Row label="Payment Mode" value={appt.paymentMode === "online" ? "📱 Online" : appt.paymentMode || "—"} />
           <Row
             label="Payment Status"
@@ -217,26 +207,22 @@ export default function BookingDetailScreen() {
 
         {/* Pay Now */}
         {appt.status === "confirmed" && appt.paymentStatus !== "paid" && (
-          <TouchableOpacity
-            style={styles.payBtn}
-            onPress={handlePayNow}
-            activeOpacity={0.85}
-            disabled={!!payingId}
-          >
-            {payingId ? (
-              <ActivityIndicator size="small" color="#0B3D2E" />
-            ) : (
-              <>
-                <Ionicons name="card" size={20} color="#0B3D2E" />
-                <View>
-                  <Text style={styles.payBtnTitle}>Pay Now</Text>
-                  <Text style={styles.payBtnSub}>₹{appt.totalAmount} · Online Payment</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color="#0B3D2E" style={{ marginLeft: "auto" }} />
-              </>
-            )}
+          <TouchableOpacity style={styles.payBtn} onPress={handlePayNow} activeOpacity={0.85}>
+            <Ionicons name="card" size={20} color="#0B3D2E" />
+            <View>
+              <Text style={styles.payBtnTitle}>Pay Now</Text>
+              <Text style={styles.payBtnSub}>Coordinate with staff for payment</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#0B3D2E" style={{ marginLeft: "auto" }} />
           </TouchableOpacity>
         )}
+
+        {/* Invoice — hidden for customer, only admin can view */}
+        {/* {(appt.status === "completed" || appt.paymentStatus === "paid") && (
+          <TouchableOpacity style={styles.invoiceBtn}>
+            <Text>View Invoice</Text>
+          </TouchableOpacity>
+        )} */}
 
         {appt.status === "confirmed" && appt.paymentStatus === "paid" && (
           <View style={styles.paidBanner}>

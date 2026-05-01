@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from "react";
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  RefreshControl, SectionList, ActivityIndicator,
+  RefreshControl, SectionList, ActivityIndicator, Alert,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -36,7 +36,7 @@ const EXCLUDED = ["Buy Subscription", "Shop", "Inquiry"];
 export default function ServicesScreen() {
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
-  const { services: ctxServices, loadServices } = useApp();
+  const { services: ctxServices, loadServices, user } = useApp();
 
   const services = ctxServices.length > 0 ? ctxServices : FALLBACK_SERVICES;
   const loading = false;
@@ -61,6 +61,18 @@ export default function ServicesScreen() {
   }, [services]);
 
   const handleBook = (service) => {
+    // Profile completeness check
+    if (!user?.phone || user.phone.trim().length < 10) {
+      Alert.alert(
+        "Profile Incomplete 📱",
+        "Please add your mobile number in your profile before booking. Staff needs your contact details to reach you.",
+        [
+          { text: "Later", style: "cancel" },
+          { text: "Update Profile", onPress: () => router.push("/screens/editprofile") },
+        ]
+      );
+      return;
+    }
     router.push({
       pathname: "/screens/bookingform",
       params: {

@@ -19,7 +19,7 @@
     },
     "android": {
       "package": "com.doggosheaven.app",
-      "versionCode": 7,
+      "versionCode": 8,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/doggoswhite.png",
         "backgroundColor": "#0B3D2E"

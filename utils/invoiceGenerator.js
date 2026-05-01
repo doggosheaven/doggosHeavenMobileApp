@@ -4,9 +4,19 @@ import * as FileSystem from "expo-file-system/legacy";
 import { Asset } from "expo-asset";
 import { Alert } from "react-native";
 
-const GST_NO     = "06AAKCD6549A1ZR";
-const GST_ONLINE = 0.18;
-const GST_CARD   = 0.20;
+// GST constants — commented out for future use
+// const GST_NO     = "06AAKCD6549A1ZR";
+// const GST_ONLINE = 0.18;
+// const GST_CARD   = 0.20;
+const GST_NO = "06AAKCD6549A1ZR"; // kept for invoice display only
+
+// const getGSTRate = (paymentMethod) => {
+//   if (!paymentMethod) return GST_ONLINE;
+//   const m = paymentMethod.toLowerCase();
+//   if (m.includes("cash")) return 0;
+//   if (m.includes("card")) return GST_CARD;
+//   return GST_ONLINE;
+// };
 
 const fmtDate = (d) =>
   d ? new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
@@ -56,7 +66,7 @@ const getLogoBase64 = async () => {
   }
 };
 
-const buildHTML = (logoSrc, invoiceNo, billType, billDate, billTo, statusHtml, tableRows, subtotal, gstAmt, grandTotal, gstLabel, paymentMethod, extraInfo, notes) => `
+const buildHTML = (logoSrc, invoiceNo, billType, billDate, billTo, statusHtml, tableRows, subtotal, gstAmt, grandTotal, gstLabel, paymentMethod, extraInfo, notes, gstRate = 0) => `
 <!DOCTYPE html><html><head><meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <style>
@@ -137,10 +147,10 @@ tbody td:last-child{text-align:right;font-weight:700;color:#0B3D2E}
 <table>${tableRows}</table>
 <div class="totals">
   <div class="t-row"><span>Subtotal</span><span>&#8377;${fmt(subtotal)}</span></div>
-  <div class="t-gst"><span>${gstLabel}</span><span>&#8377;${fmt(gstAmt)}</span></div>
+  ${gstAmt > 0 ? `<div class="t-gst"><span>${gstLabel}</span><span>&#8377;${fmt(gstAmt)}</span></div>` : "<!-- GST disabled -->"}
   <div class="t-grand"><span>Total</span><span>&#8377;${fmt(grandTotal)}</span></div>
 </div>
-<div class="gst-note">GSTIN: ${GST_NO} &nbsp;|&nbsp; GST: ${(getGSTRate(paymentMethod) * 100).toFixed(0)}% &nbsp;|&nbsp; Payment Mode: ${paymentMethod || "Online"}</div>
+<div class="gst-note">GSTIN: ${GST_NO} &nbsp;|&nbsp; Payment Mode: ${paymentMethod || "Online"}</div>
 ${extraInfo ? `<div class="info-row">${extraInfo}</div>` : ""}
 ${notes ? `<div class="notes-box"><div class="notes-label">Notes</div><div class="notes-txt">${notes}</div></div>` : ""}
 <div class="footer">
@@ -156,12 +166,13 @@ export const buildInvoiceHTML = async (appt) => {
   const invoiceNo = `DH-${appt._id.slice(-8).toUpperCase()}`;
   const customerName = appt.customerId?.fullName || appt.customerId?.name || "Customer";
   const customerEmail = appt.customerId?.email || "";
-  const subtotal = appt.totalAmount || 0;
-  const paymentMethod = appt.paymentMethod || appt.paymentMode || appt.pricingType || "online";
-  const gstRate = getGSTRate(paymentMethod);
-  const gstAmt = subtotal * gstRate;
-  const grandTotal = subtotal + gstAmt;
-  const gstLabel = getGSTLabel(paymentMethod);
+  const paymentMethod = appt.paymentMethod || appt.paymentMode || "—";
+  const grandTotal = appt.totalAmount || 0;
+  const subtotal = grandTotal; // GST disabled
+  // const gstAmt = appt.gstAmount > 0 ? appt.gstAmount : 0;
+  // const subtotal = appt.totalAmount > 0 ? appt.totalAmount - gstAmt : 0;
+  // const gstLabel = gstAmt > 0 ? getGSTLabel(paymentMethod) : "GST (0%)";
+  // const gstRate = gstAmt > 0 ? getGSTRate(paymentMethod) : 0;
 
   const statusColor = appt.status === "completed" ? "#0B3D2E" : appt.status === "confirmed" ? "#3E7B27" : appt.status === "cancelled" ? "#C62828" : "#F59E0B";
   const statusBg = appt.status === "completed" || appt.status === "confirmed" ? "#E8F5E8" : appt.status === "cancelled" ? "#FFEBEE" : "#FFF9E6";
@@ -176,7 +187,7 @@ export const buildInvoiceHTML = async (appt) => {
     <tbody><tr>
       <td>1</td><td>${appt.serviceName || "—"}</td><td>${appt.petName || "—"}</td>
       <td>${fmtDate(appt.appointmentDate)}</td><td>${appt.appointmentTime || "—"}</td>
-      <td>&#8377;${fmt(subtotal)}</td>
+      <td>&#8377;${fmt(grandTotal)}</td>
     </tr></tbody>`;
 
   const extraInfo = `
@@ -187,7 +198,7 @@ export const buildInvoiceHTML = async (appt) => {
   return buildHTML(
     logoSrc, invoiceNo, "INVOICE", fmtDate(appt.appointmentDate),
     { name: customerName, detail1: customerEmail },
-    statusHtml, tableRows, subtotal, gstAmt, grandTotal, gstLabel, paymentMethod, extraInfo, appt.notes || ""
+    statusHtml, tableRows, grandTotal, 0, grandTotal, "GST (N/A)", paymentMethod, extraInfo, appt.notes || "", 0
   );
 };
 
@@ -196,10 +207,13 @@ export const buildWalkInInvoiceHTML = async (data) => {
   const logoSrc = await getLogoBase64();
   const { billNo, customerName, petName, phone, services, total, paymentMethod, notes, date } = data;
   const subtotal = Number(total) || 0;
-  const gstRate = getGSTRate(paymentMethod);
-  const gstAmt = subtotal * gstRate;
-  const grandTotal = subtotal + gstAmt;
-  const gstLabel = getGSTLabel(paymentMethod);
+  // const gstRate = getGSTRate(paymentMethod);
+  // const gstAmt = subtotal * gstRate;
+  // const grandTotal = subtotal + gstAmt;
+  const gstAmt = 0;
+  const grandTotal = subtotal;
+  // const gstLabel = getGSTLabel(paymentMethod);
+  const gstLabel = "GST (N/A)";
 
   const serviceRows = (services || [])
     .filter((s) => s.name?.trim())
@@ -216,8 +230,8 @@ export const buildWalkInInvoiceHTML = async (data) => {
 
   return buildHTML(
     logoSrc, billNo, "WALK-IN BILL", fmtDate(date),
-    { name: customerName, detail1: petName ? `🐾 Pet: ${petName}` : "", detail2: phone ? `📞 ${phone}` : "" },
-    statusHtml, tableRows, subtotal, gstAmt, grandTotal, gstLabel, paymentMethod, "", notes || ""
+    { name: customerName, detail1: petName ? `Pet: ${petName}` : "", detail2: phone ? `Ph: ${phone}` : "" },
+    statusHtml, tableRows, subtotal, 0, grandTotal, gstLabel, paymentMethod, "", notes || "", 0
   );
 };
 

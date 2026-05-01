@@ -253,12 +253,25 @@ export default function BookingFormScreen() {
   };
   const ambulanceFare = ambulance ? calcAmbulanceFare(ambulanceKm) : 0;
 
-  const gstRate = 0.18;
+  // const gstRate = 0.18; // GST disabled
   const subtotal = (consultFee || 0) + ambulanceFare;
-  const gstAmount = Math.round(subtotal * gstRate);
-  const totalAmount = subtotal + gstAmount;
+  // const gstAmount = Math.round(subtotal * gstRate); // GST disabled
+  const gstAmount = 0;
+  const totalAmount = subtotal; // no GST
 
   const handleSubmit = async () => {
+    // Profile completeness check
+    if (!user?.phone || user.phone.trim().length < 10) {
+      Alert.alert(
+        "Profile Incomplete",
+        "Please add your mobile number before booking. Staff needs your contact details.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Update Profile", onPress: () => router.push("/screens/editprofile") },
+        ]
+      );
+      return;
+    }
     if (!selectedPet) return Alert.alert("Missing", "Please select a pet.");
     if (isVaccination && !selectedVaccine) return Alert.alert("Missing", "Please select a vaccine type.");
     if (isSlotPast(selectedSlot.h, selectedSlot.m))
@@ -286,7 +299,8 @@ export default function BookingFormScreen() {
           petAge: selectedPet.age || "N/A",
           notes: notes.trim(),
           totalAmount,
-          gstAmount,
+          // gstAmount, // GST disabled
+          gstAmount: 0,
           paymentMode,
           pricingType: selectedOption?.label || "On Request",
           ambulanceRequired: ambulance,
@@ -767,14 +781,14 @@ export default function BookingFormScreen() {
           )}
         </View>
 
-        {/* Payment Mode — Online Only */}
+        {/* Payment Mode */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Payment Mode</Text>
           <View style={[styles.paymentBtn, styles.paymentBtnActive, { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16 }]}>
             <Ionicons name="card-outline" size={20} color="#A8D96C" />
             <View>
-              <Text style={[styles.paymentBtnText, styles.paymentBtnTextActive]}>📱 Online Payment</Text>
-              <Text style={styles.paymentGstLabel}>18% GST applicable</Text>
+              <Text style={[styles.paymentBtnText, styles.paymentBtnTextActive]}>Coordinate with staff for payment</Text>
+              {/* <Text style={styles.paymentGstLabel}>18% GST applicable</Text> */}
             </View>
           </View>
         </View>
@@ -843,7 +857,7 @@ export default function BookingFormScreen() {
             <Text style={styles.summaryValue}>₹{subtotal}</Text>
           </View>
 
-          {/* GST */}
+          {/* GST disabled
           <View style={styles.summaryRow}>
             <View style={styles.summaryLabelCol}>
               <Text style={[styles.summaryLabel, { color: "#B8860B" }]}>GST (18%)</Text>
@@ -851,12 +865,12 @@ export default function BookingFormScreen() {
             </View>
             <Text style={[styles.summaryValue, { color: "#B8860B" }]}>₹{gstAmount}</Text>
           </View>
+          */}
 
           {/* Total */}
           <View style={styles.summaryTotalRow}>
             <View>
               <Text style={styles.summaryTotalLabel}>Total Payable</Text>
-              <Text style={styles.summaryTotalMeta}>₹{subtotal} + ₹{gstAmount} GST</Text>
             </View>
             <Text style={styles.summaryTotalValue}>₹{totalAmount}</Text>
           </View>
@@ -866,7 +880,7 @@ export default function BookingFormScreen() {
         <View style={styles.infoBox}>
           <Ionicons name="information-circle-outline" size={18} color="#3E7B27" />
           <Text style={styles.infoText}>
-            Your request will be sent to the Doggos Heaven team. Once confirmed, you will receive a notification to complete the online payment.
+            Your request will be sent to the Doggos Heaven team. Once confirmed, please coordinate with our staff for payment.
           </Text>
         </View>
 

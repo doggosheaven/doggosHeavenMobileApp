@@ -2,12 +2,13 @@ import { useState, useCallback, useEffect } from "react";
 import {
   View, Text, ScrollView, FlatList, StyleSheet, TouchableOpacity,
   ActivityIndicator, RefreshControl, Alert, Modal, TextInput,
-  KeyboardAvoidingView, Platform,
+  KeyboardAvoidingView, Platform, Image,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { WebView } from "react-native-webview";
+import * as ImagePicker from "expo-image-picker";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
 import { buildInvoiceHTML, downloadInvoicePDF } from "../../utils/invoiceGenerator";
@@ -31,9 +32,13 @@ export default function StaffAppointments() {
   const [downloading, setDownloading] = useState(false);
   const [detailAppt, setDetailAppt] = useState(null);
   const [payModal, setPayModal] = useState(false);
+  const [payAppt, setPayAppt] = useState(null); // alag state payment ke liye
   const [payMode, setPayMode] = useState(null);
   const [payAmount, setPayAmount] = useState("");
   const [payLoading, setPayLoading] = useState(false);
+  const [payScreenshot, setPayScreenshot] = useState(null);
+  const [cashNotes, setCashNotes] = useState([]); // [{ denomination: 500, count: 2 }]
+  const [noteDenom, setNoteDenom] = useState("");
   const [confirmAmountModal, setConfirmAmountModal] = useState(false);
   const [confirmAmount, setConfirmAmount] = useState("");
   const [confirmAmountAppt, setConfirmAmountAppt] = useState(null);
@@ -85,38 +90,104 @@ const handleUpdateStatus = async (id, status, extraBody = {}) => {
     finally { setActionId(null); }
   };
 
-  const handleAddPayment = async () => {
-    if (!payMode) return Alert.alert("Select Mode", "Please select a payment mode.");
-    const apptId = detailAppt._id;
-    setPayLoading(true);
-    try {
-      const res = await fetch(`${BASE_URL}/api/v1/customerappointment/updateappoint/${apptId}/status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", Authorization: token },
-        body: JSON.stringify({ status: detailAppt.status, paymentMode: payMode, paymentStatus: "paid", totalAmount: payAmount ? Number(payAmount) : detailAppt.totalAmount }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        const updated = data.data;
-        setAppointments(prev => prev.map(a => a._id === apptId ? { ...a, ...updated } : a));
-        setDetailAppt(prev => ({ ...prev, ...updated }));
-        setPayModal(false); setPayMode(null); setPayAmount("");
-        Alert.alert("✅ Payment Added", `Payment recorded via ${payMode}.`);
-      } else Alert.alert("Error", data.message);
-    } catch { Alert.alert("Error", "Network error"); }
-    finally { setPayLoading(false); }
+  const pickPaymentImage = async () => {
+    Alert.alert(
+      "Upload Photo",
+      "Choose source",
+      [
+        {
+          text: "Camera",
+          onPress: async () => {
+            const { status } = await ImagePicker.requestCameraPermissionsAsync();
+            if (status !== "granted") return Alert.alert("Permission needed", "Please allow camera access.");
+            const result = await ImagePicker.launchCameraAsync({ quality: 0.7 });
+            if (!result.canceled) setPayScreenshot(result.assets[0]);
+          },
+        },
+        {
+          text: "Gallery",
+          onPress: async () => {
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== "granted") return Alert.alert("Permission needed", "Please allow photo access.");
+            const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.7 });
+            if (!result.canceled) setPayScreenshot(result.assets[0]);
+          },
+        },
+        { text: "Cancel", style: "cancel" },
+      ]
+    );
   };
 
-  const openCompleteModal = (appt) => {
-    if (appt.paymentStatus === "paid") {
-      Alert.alert("Complete", "Mark as completed?", [
-        { text: "Cancel", style: "cancel" },
-        { text: "Complete", onPress: () => handleUpdateStatus(appt._id, "completed") },
-      ]);
-    } else {
-      setPayMode(null); setPayAmount(String(appt.totalAmount || ""));
-      setPayModal(true);
+  const resetPayModal = () => {
+    setPayModal(false); setPayAppt(null); setPayMode(null); setPayAmount("");
+    setPayScreenshot(null); setCashNotes([]); setNoteDenom("");
+  };
+
+  const cashTotal = cashNotes.reduce((sum, n) => sum + (n.denomination * n.count), 0);
+
+  const submitPaymentRecord = async (apptId, markComplete = false) => {
+    if (!payMode) return Alert.alert("Select Mode", "Please select a payment mode.");
+    if (!payScreenshot) return Alert.alert("Upload Required", payMode === "cash" ? "Please upload cash photo." : "Please upload payment screenshot.");
+    const bookingAmt = Number(payAmount) || payAppt?.totalAmount || 0;
+    if (payMode === "cash" && cashNotes.length > 0) {
+      if (cashTotal < bookingAmt) return Alert.alert("Amount Short", "Cash total \u20b9" + cashTotal + " is less than booking amount \u20b9" + bookingAmt + ". Please add more notes.");
+      if (cashTotal > bookingAmt) {
+        const change = cashTotal - bookingAmt;
+        const proceed = await new Promise(resolve =>
+          Alert.alert("Extra Cash", "Cash total \u20b9" + cashTotal + " is \u20b9" + change + " more than booking amount \u20b9" + bookingAmt + ". Return \u20b9" + change + " as change?",
+            [{ text: "Cancel", onPress: () => resolve(false), style: "cancel" }, { text: "Yes, Proceed", onPress: () => resolve(true) }]
+          )
+        );
+        if (!proceed) return;
+      }
     }
+    setPayLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append("amount", String(bookingAmt));
+      formData.append("paymentMode", payMode);
+      formData.append("screenshot", { uri: payScreenshot.uri, type: "image/jpeg", name: "payment.jpg" });
+      if (cashNotes.length > 0) {
+        const noteStr = cashNotes.map(n => n.count + "x\u20b9" + n.denomination).join(", ");
+        formData.append("cashSerialNumber", noteStr);
+      }
+      const res = await fetch(`${BASE_URL}/api/v1/payments/record/${apptId}`, {
+        method: "POST",
+        headers: { Authorization: token },
+        body: formData,
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message);
+      if (markComplete) {
+        await fetch(`${BASE_URL}/api/v1/customerappointment/updateappoint/${apptId}/status`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", Authorization: token },
+          body: JSON.stringify({ status: "completed", paymentMode: payMode, paymentStatus: "paid" }),
+        });
+      }
+      setAppointments(prev => prev.map(a => a._id === apptId ? {
+        ...a, paymentStatus: "paid", paymentMode: payMode,
+        ...(markComplete ? { status: "completed" } : {}),
+      } : a));
+      resetPayModal();
+      Alert.alert("\u2705 Done", markComplete ? "Payment recorded & booking completed!" : "Payment recorded via " + payMode + ".");
+    } catch (e) {
+      Alert.alert("Error", e.message || "Network error");
+    } finally {
+      setPayLoading(false);
+    }
+  };
+
+  const handleAddPayment = () => submitPaymentRecord(payAppt._id, false);
+
+  const openCompleteModal = (appt) => {
+    setPayAppt(appt);
+    setPayMode(null);
+    setPayAmount(String(appt.totalAmount || ""));
+    setPayScreenshot(null);
+    setCashNotes([]);
+    setNoteDenom("");
+    setPayModal(true);
   };
 
   const { filterDate: filterDateParam } = useLocalSearchParams();
@@ -361,7 +432,15 @@ const handleUpdateStatus = async (id, status, extraBody = {}) => {
                       <Ionicons name="cash-outline" size={15} color="#F59E0B" />
                       <Text style={s.paySectionTitle}>Payment Pending</Text>
                     </View>
-                    <TouchableOpacity style={s.addPayBtn} onPress={() => { setPayMode(null); setPayAmount(String(appt.totalAmount || "")); setPayModal(true); }} activeOpacity={0.8}>
+                    <TouchableOpacity style={s.addPayBtn} onPress={() => {
+                      setPayAppt(appt);
+                      setPayMode(null);
+                      setPayAmount(String(appt.totalAmount || ""));
+                      setPayScreenshot(null);
+                      setCashNotes([]);
+                      setNoteDenom("");
+                      setPayModal(true);
+                    }} activeOpacity={0.8}>
                       <Ionicons name="add-circle-outline" size={16} color="#0B3D2E" />
                       <Text style={s.addPayBtnTxt}>Add Payment</Text>
                     </TouchableOpacity>
@@ -376,22 +455,27 @@ const handleUpdateStatus = async (id, status, extraBody = {}) => {
                 )}
 
                 {appt.status === "confirmed" && (
-                  <TouchableOpacity style={s.completeBtn} onPress={() => openCompleteModal(appt)} activeOpacity={0.8}>
+                  <TouchableOpacity
+                    style={s.completeBtn}
+                    onPress={() => {
+                      const apptCopy = { ...appt };
+                      setDetailAppt(null);
+                      setTimeout(() => openCompleteModal(apptCopy), 400);
+                    }}
+                    activeOpacity={0.8}
+                  >
                     <Ionicons name="ribbon-outline" size={18} color="#fff" />
                     <Text style={s.completeBtnText}>Mark as Completed</Text>
                   </TouchableOpacity>
                 )}
 
-                {(appt.status === "completed" || appt.paymentStatus === "paid") && (
-                  <TouchableOpacity
-                    style={s.invoiceBtn}
-                    onPress={() => openInvoice(appt)}
-                    activeOpacity={0.8}
-                  >
+                {/* Invoice — only admin can view, hidden for staff */}
+                {/* {(appt.status === "completed" || appt.paymentStatus === "paid") && (
+                  <TouchableOpacity style={s.invoiceBtn} onPress={() => openInvoice(appt)} activeOpacity={0.8}>
                     <Ionicons name="document-text-outline" size={15} color="#3E7B27" />
                     <Text style={s.invoiceBtnText}>View Invoice</Text>
                   </TouchableOpacity>
-                )}
+                )} */}
 
                 <View style={{ height: 20 }} />
               </ScrollView>
@@ -401,10 +485,10 @@ const handleUpdateStatus = async (id, status, extraBody = {}) => {
       </Modal>
 
       {/* Payment Modal */}
-      <Modal visible={payModal} transparent animationType="slide" onRequestClose={() => setPayModal(false)}>
+      <Modal visible={payModal} transparent animationType="slide" onRequestClose={() => { setPayModal(false); }}>
         <KeyboardAvoidingView style={s.modalOverlay} behavior={Platform.OS === "ios" ? "padding" : "height"}>
           <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setPayModal(false)} />
-          <View style={s.modalSheet}>
+          <View style={[s.modalSheet, { maxHeight: "90%" }]}>
             <View style={s.modalHeader}>
               <Text style={s.modalTitle}>Record Payment</Text>
               <TouchableOpacity onPress={() => setPayModal(false)}>
@@ -412,77 +496,183 @@ const handleUpdateStatus = async (id, status, extraBody = {}) => {
               </TouchableOpacity>
             </View>
 
-            {detailAppt && (
-              <View style={s.payCustomerBox}>
-                <Ionicons name="person-outline" size={14} color="#3E7B27" />
-                <Text style={s.payCustomerTxt}>
-                  {detailAppt.customerId?.fullName || detailAppt.customerId?.name || "Customer"}
-                  {detailAppt.customerId?.phone ? `  •  📞 ${detailAppt.customerId.phone}` : ""}
-                </Text>
-              </View>
-            )}
-
-            <Text style={s.payLabel}>Amount (₹)</Text>
-            <TextInput
-              style={s.payInput}
-              value={payAmount}
-              onChangeText={setPayAmount}
-              keyboardType="numeric"
-              placeholder="Enter amount"
-              placeholderTextColor="#aaa"
-            />
-
-            <Text style={s.payLabel}>Payment Mode</Text>
-            <View style={s.payModeRow}>
-              {["cash", "card", "upi"].map((m) => (
-                <TouchableOpacity key={m} style={[s.payModeChip, payMode === m && s.payModeChipActive]} onPress={() => setPayMode(m)} activeOpacity={0.8}>
-                  <Text style={[s.payModeChipTxt, payMode === m && s.payModeChipTxtActive]}>{m.toUpperCase()}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {detailAppt?.status === "confirmed" && (
-              <View style={s.completeToggleRow}>
-                <Ionicons name="information-circle-outline" size={15} color="#666" />
-                <Text style={s.completeToggleTxt}>Booking will also be marked as Completed</Text>
-              </View>
-            )}
-
-            <TouchableOpacity
-              style={[s.payConfirmBtn, !payMode && { opacity: 0.5 }]}
-              onPress={async () => {
-                if (detailAppt?.status === "confirmed") {
-                  setPayLoading(true);
-                  try {
-                    const res = await fetch(`${BASE_URL}/api/v1/customerappointment/updateappoint/${detailAppt._id}/status`, {
-                      method: "PATCH",
-                      headers: { "Content-Type": "application/json", Authorization: token },
-                      body: JSON.stringify({ status: "completed", paymentMode: payMode, paymentStatus: "paid", totalAmount: payAmount ? Number(payAmount) : detailAppt.totalAmount }),
-                    });
-                    const data = await res.json();
-                    if (data.success) {
-                      const updated = data.data;
-                      setAppointments(prev => prev.map(a => a._id === detailAppt._id ? { ...a, ...updated } : a));
-                      setDetailAppt(prev => ({ ...prev, ...updated }));
-                      setPayModal(false); setPayMode(null); setPayAmount("");
-                      Alert.alert("✅ Done", `Completed & payment recorded via ${payMode}.`);
-                    } else Alert.alert("Error", data.message);
-                  } catch { Alert.alert("Error", "Network error"); }
-                  finally { setPayLoading(false); }
-                } else {
-                  handleAddPayment();
-                }
-              }}
-              disabled={!payMode || payLoading}
-              activeOpacity={0.8}
-            >
-              {payLoading ? <ActivityIndicator color="#A8D96C" /> : (
-                <><Ionicons name="checkmark-circle-outline" size={18} color="#A8D96C" />
-                <Text style={s.payConfirmBtnTxt}>
-                  {detailAppt?.status === "confirmed" ? "Complete & Save Payment" : "Save Payment"}
-                </Text></>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              {payAppt && (
+                <View style={s.payCustomerBox}>
+                  <Ionicons name="person-outline" size={14} color="#3E7B27" />
+                  <Text style={s.payCustomerTxt}>
+                    {payAppt.customerId?.fullName || payAppt.customerId?.name || "Customer"}
+                    {payAppt.customerId?.phone ? "  \u2022  " + payAppt.customerId.phone : ""}
+                  </Text>
+                </View>
               )}
-            </TouchableOpacity>
+
+              <Text style={s.payLabel}>Amount (\u20b9)</Text>
+              <TextInput
+                style={s.payInput}
+                value={payAmount}
+                onChangeText={setPayAmount}
+                keyboardType="numeric"
+                placeholder="Enter amount"
+                placeholderTextColor="#aaa"
+              />
+
+              <Text style={s.payLabel}>Payment Mode</Text>
+              <View style={s.payModeRow}>
+                {["cash", "online"].map((m) => (
+                  <TouchableOpacity key={m} style={[s.payModeChip, payMode === m && s.payModeChipActive]}
+                  onPress={() => { setPayMode(m); setPayScreenshot(null); setCashNotes([]); setNoteDenom(""); }}
+                    activeOpacity={0.8}>
+                    <Text style={[s.payModeChipTxt, payMode === m && s.payModeChipTxtActive]}>
+                      {m === "cash" ? "\ud83d\udcb5 CASH" : "\ud83d\udcf1 ONLINE"}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {payMode && (
+                <>
+                  <Text style={s.payLabel}>
+                    {payMode === "cash" ? "\ud83d\udcf7 Cash Photo" : "\ud83d\udcf8 Payment Screenshot"}
+                  </Text>
+                  <TouchableOpacity style={s.uploadBox} onPress={pickPaymentImage} activeOpacity={0.8}>
+                    {payScreenshot ? (
+                      <Image source={{ uri: payScreenshot.uri }} style={s.uploadPreview} resizeMode="cover" />
+                    ) : (
+                      <View style={s.uploadPlaceholder}>
+                        <Ionicons name="cloud-upload-outline" size={28} color="#3E7B27" />
+                        <Text style={s.uploadPlaceholderTxt}>Tap to upload</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                </>
+              )}
+
+              {payMode === "cash" && (
+                <>
+                  <Text style={s.payLabel}>Cash Notes</Text>
+                  <View style={{ flexDirection: "row", gap: 8, marginBottom: 8 }}>
+                    <TextInput
+                      style={[s.payInput, { width: 90 }]}
+                      value={noteDenom}
+                      onChangeText={v => setNoteDenom(v.replace(/[^0-9]/g, ""))}
+                      keyboardType="numeric"
+                      placeholder="\u20b9 Note"
+                      placeholderTextColor="#aaa"
+                    />
+                    <TouchableOpacity
+                      style={{ backgroundColor: noteDenom ? "#0B3D2E" : "#ccc", borderRadius: 10, paddingHorizontal: 16, justifyContent: "center" }}
+                      onPress={() => {
+                        const d = Number(noteDenom);
+                        if (!d || d <= 0) return Alert.alert("Enter Note Value", "e.g. 500, 200, 100");
+                        const existing = cashNotes.findIndex(n => n.denomination === d);
+                        if (existing >= 0) {
+                          setCashNotes(prev => prev.map((n, i) => i === existing ? { ...n, count: n.count + 1 } : n));
+                        } else {
+                          setCashNotes(prev => [...prev, { denomination: d, count: 1 }]);
+                        }
+                        setNoteDenom("");
+                      }}
+                      disabled={!noteDenom}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name="add" size={20} color="#A8D96C" />
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={{ fontSize: 10, fontFamily: "Inter_400Regular", color: "#aaa", marginBottom: 8 }}>
+                    Enter note value (e.g. 500) and tap + to add
+                  </Text>
+
+                  {cashNotes.length > 0 && (
+                    <View style={{ backgroundColor: "#F8FFF8", borderRadius: 12, borderWidth: 1, borderColor: "#D4EDD4", padding: 10, marginBottom: 6 }}>
+                      {cashNotes.map((note, idx) => (
+                        <View key={idx} style={{ flexDirection: "row", alignItems: "center", paddingVertical: 6, borderBottomWidth: idx < cashNotes.length - 1 ? 1 : 0, borderBottomColor: "#E8F5E8" }}>
+                          <View style={{ backgroundColor: "#0B3D2E", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, marginRight: 8 }}>
+                            <Text style={{ fontSize: 12, fontFamily: "Poppins_700Bold", color: "#A8D96C" }}>₹{note.denomination}</Text>
+                          </View>
+                          <Text style={{ flex: 1, fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E" }}>× {note.count}</Text>
+                          <Text style={{ fontSize: 13, fontFamily: "Poppins_700Bold", color: "#3E7B27", marginRight: 8 }}>₹{note.denomination * note.count}</Text>
+                          <View style={{ flexDirection: "row", gap: 4 }}>
+                            <TouchableOpacity
+                              style={{ backgroundColor: "#E8F5E8", borderRadius: 6, padding: 4 }}
+                              onPress={() => setCashNotes(prev => prev.map((n, i) => i === idx ? { ...n, count: Math.max(1, n.count - 1) } : n))}
+                              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                            >
+                              <Ionicons name="remove" size={14} color="#0B3D2E" />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={{ backgroundColor: "#E8F5E8", borderRadius: 6, padding: 4 }}
+                              onPress={() => setCashNotes(prev => prev.map((n, i) => i === idx ? { ...n, count: n.count + 1 } : n))}
+                              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                            >
+                              <Ionicons name="add" size={14} color="#0B3D2E" />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              onPress={() => setCashNotes(prev => prev.filter((_, i) => i !== idx))}
+                              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                            >
+                              <Ionicons name="close-circle" size={18} color="#C62828" />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      ))}
+                      <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: "#D4EDD4" }}>
+                        <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 3 }}>
+                          <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: "#666" }}>Cash Total</Text>
+                          <Text style={{ fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E" }}>₹{cashTotal}</Text>
+                        </View>
+                        <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 3 }}>
+                          <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: "#666" }}>Booking Amount</Text>
+                          <Text style={{ fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E" }}>₹{Number(payAmount) || payAppt?.totalAmount || 0}</Text>
+                        </View>
+                        {(() => {
+                          const booking = Number(payAmount) || payAppt?.totalAmount || 0;
+                          const diff = cashTotal - booking;
+                          if (diff === 0) return (
+                            <View style={{ flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "#E8F5E8", borderRadius: 8, padding: 6, marginTop: 4 }}>
+                              <Ionicons name="checkmark-circle" size={14} color="#3E7B27" />
+                              <Text style={{ fontSize: 12, fontFamily: "Poppins_700Bold", color: "#3E7B27" }}>Exact amount ✔</Text>
+                            </View>
+                          );
+                          return (
+                            <View style={{ flexDirection: "row", justifyContent: "space-between", backgroundColor: diff < 0 ? "#FFEBEE" : "#FFF9E6", borderRadius: 8, padding: 6, marginTop: 4 }}>
+                              <Text style={{ fontSize: 12, fontFamily: "Poppins_700Bold", color: diff < 0 ? "#C62828" : "#B45309" }}>
+                                {diff < 0 ? "⚠️ Short" : "⚠️ Extra (Return change)"}
+                              </Text>
+                              <Text style={{ fontSize: 12, fontFamily: "Poppins_700Bold", color: diff < 0 ? "#C62828" : "#B45309" }}>₹{Math.abs(diff)}</Text>
+                            </View>
+                          );
+                        })()}
+                      </View>
+                    </View>
+                  )}
+                </>
+              )}
+
+              {payAppt?.status === "confirmed" && (
+                <View style={s.completeToggleRow}>
+                  <Ionicons name="information-circle-outline" size={15} color="#666" />
+                  <Text style={s.completeToggleTxt}>Booking will also be marked as Completed</Text>
+                </View>
+              )}
+
+              <TouchableOpacity
+                style={[s.payConfirmBtn, (!payMode || payLoading) && { opacity: 0.5 }]}
+                onPress={() => submitPaymentRecord(payAppt._id, payAppt?.status === "confirmed")}
+                disabled={!payMode || payLoading}
+                activeOpacity={0.8}
+              >
+                {payLoading ? <ActivityIndicator color="#A8D96C" /> : (
+                  <>
+                    <Ionicons name="checkmark-circle-outline" size={18} color="#A8D96C" />
+                    <Text style={s.payConfirmBtnTxt}>
+                      {payAppt?.status === "confirmed" ? "Complete & Save Payment" : "Save Payment"}
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              <View style={{ height: 24 }} />
+            </ScrollView>
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -746,6 +936,10 @@ const s = StyleSheet.create({
   payModeChipActive: { backgroundColor: "#0B3D2E", borderColor: "#0B3D2E" },
   payModeChipTxt: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#666" },
   payModeChipTxtActive: { color: "#A8D96C" },
+  uploadBox: { borderWidth: 1.5, borderColor: "#A8D96C", borderStyle: "dashed", borderRadius: 12, overflow: "hidden", height: 120, marginBottom: 4 },
+  uploadPreview: { width: "100%", height: "100%" },
+  uploadPlaceholder: { flex: 1, justifyContent: "center", alignItems: "center", gap: 6, backgroundColor: "#F0F7F0" },
+  uploadPlaceholderTxt: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#3E7B27" },
   completeToggleRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 12, backgroundColor: "#F0F7F0", borderRadius: 8, padding: 10 },
   completeToggleTxt: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#555", flex: 1 },
   payConfirmBtn: { backgroundColor: "#0B3D2E", borderRadius: 12, height: 50, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 16 },
