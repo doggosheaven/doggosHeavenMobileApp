@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  ActivityIndicator, RefreshControl, Alert, Modal, TextInput, FlatList,
+  ActivityIndicator, RefreshControl, Alert, Modal, TextInput, FlatList, Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
@@ -73,8 +73,8 @@ const cal = StyleSheet.create({
   monthTxt: {fontSize:16,fontFamily:"Poppins_700Bold",color:"#0B3D2E"},
   dayRow: {flexDirection:"row",marginBottom:6},
   dayName: {flex:1,textAlign:"center",fontSize:11,fontFamily:"Poppins_700Bold",color:"#3E7B27"},
-  day: {flex:1,aspectRatio:1,justifyContent:"center",alignItems:"center",borderRadius:8,margin:1},
-  dayEmpty: {flex:1,aspectRatio:1,margin:1},
+  day: {flex:1,height:36,justifyContent:"center",alignItems:"center",borderRadius:8,margin:1},
+  dayEmpty: {flex:1,height:36,margin:1},
   daySelected: {backgroundColor:"#0B3D2E"},
   dayToday: {backgroundColor:"#E8F5E8",borderWidth:1.5,borderColor:"#3E7B27"},
   dayTxt: {fontSize:13,fontFamily:"Inter_400Regular",color:"#1A1A1A"},
@@ -118,12 +118,32 @@ export default function AdminAppointments() {
   const [confirmAmountAppt, setConfirmAmountAppt] = useState(null);
   const [confirmAmountLoading, setConfirmAmountLoading] = useState(false);
   const [detailAppt, setDetailAppt] = useState(null);
+  const [paymentHistory, setPaymentHistory] = useState([]);
+  const [payHistoryLoading, setPayHistoryLoading] = useState(false);
+  const [fullImg, setFullImg] = useState(null);
 
   const openInvoice = async (appt) => {
     setInvoiceHTML("");
     setInvoiceAppt(appt);
     const html = await buildInvoiceHTML(appt);
     setInvoiceHTML(html);
+  };
+
+  const openDetailAppt = async (appt) => {
+    setDetailAppt(appt);
+    setPaymentHistory([]);
+    setPayHistoryLoading(true);
+    try {
+      const { token: freshToken } = await getAuth();
+      const t = freshToken || token || "";
+      if (t) setToken(t);
+      const res = await fetch(`${BASE_URL}/api/v1/payments/history/${appt._id}`, {
+        headers: { Authorization: t },
+      });
+      const data = await res.json();
+      if (data.success) setPaymentHistory(data.payments || []);
+    } catch (e) { console.log("payment history error:", e); }
+    finally { setPayHistoryLoading(false); }
   };
 
   const loadAppointments = useCallback(async (force = false) => {
@@ -325,7 +345,7 @@ export default function AdminAppointments() {
             </View>
           ) : (
             filtered.map((appt) => (
-              <TouchableOpacity key={appt._id} style={styles.card} onPress={() => setDetailAppt(appt)} activeOpacity={0.85}>
+              <TouchableOpacity key={appt._id} style={styles.card} onPress={() => openDetailAppt(appt)} activeOpacity={0.85}>
                 <View style={styles.cardHeader}>
                   <View style={styles.cardHeaderLeft}>
                     <Text style={styles.serviceName}>{appt.serviceName}</Text>
@@ -648,6 +668,83 @@ export default function AdminAppointments() {
                 <DetailRow icon="time-outline" label="Booked At" value={detailAppt.bookedAt ? new Date(detailAppt.bookedAt).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"} last />
               </View>
 
+              {/* Payment Details from Staff */}
+              <View style={styles.detailSection}>
+                <Text style={styles.detailSectionTitle}>Payment Details (Staff Recorded)</Text>
+                {payHistoryLoading ? (
+                  <ActivityIndicator size="small" color="#0B3D2E" style={{ marginVertical: 12 }} />
+                ) : paymentHistory.length === 0 ? (
+                  <View style={{ paddingVertical: 14, alignItems: "center" }}>
+                    <Ionicons name="receipt-outline" size={28} color="#ccc" />
+                    <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: "#aaa", marginTop: 6 }}>No payment recorded yet</Text>
+                  </View>
+                ) : (
+                  paymentHistory.map((pay, idx) => (
+                    <View key={pay._id} style={[styles.payHistoryCard, idx < paymentHistory.length - 1 && { marginBottom: 12 }]}>
+                      {/* Mode + Amount */}
+                      <View style={styles.payHistoryTop}>
+                        <View style={[styles.payModeBadge, { backgroundColor: pay.paymentMode === "cash" ? "#FFF9E6" : "#EEF9FF" }]}>
+                          <Text style={[styles.payModeBadgeTxt, { color: pay.paymentMode === "cash" ? "#B45309" : "#1565C0" }]}>
+                            {pay.paymentMode === "cash" ? "💵 CASH" : "📱 ONLINE"}
+                          </Text>
+                        </View>
+                        <Text style={styles.payHistoryAmt}>₹{pay.amount}</Text>
+                        <Text style={styles.payHistoryTime}>
+                          {new Date(pay.paidAt).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                        </Text>
+                      </View>
+
+                      {/* Recorded by */}
+                      {pay.recordedBy?.fullName && (
+                        <View style={styles.payHistoryRow}>
+                          <Ionicons name="person-outline" size={13} color="#3E7B27" />
+                          <Text style={styles.payHistoryLabel}>Recorded by</Text>
+                          <Text style={styles.payHistoryValue}>{pay.recordedBy.fullName}</Text>
+                        </View>
+                      )}
+
+                      {/* Cash Notes breakdown */}
+                      {pay.paymentMode === "cash" && pay.cashSerialNumber && (
+                        <View style={styles.payHistoryRow}>
+                          <Ionicons name="cash-outline" size={13} color="#3E7B27" />
+                          <Text style={styles.payHistoryLabel}>Notes</Text>
+                          <Text style={[styles.payHistoryValue, { flex: 2 }]}>{pay.cashSerialNumber}</Text>
+                        </View>
+                      )}
+
+                      {/* Note / remark */}
+                      {pay.note && (
+                        <View style={styles.payHistoryRow}>
+                          <Ionicons name="document-text-outline" size={13} color="#3E7B27" />
+                          <Text style={styles.payHistoryLabel}>Note</Text>
+                          <Text style={[styles.payHistoryValue, { flex: 2 }]}>{pay.note}</Text>
+                        </View>
+                      )}
+
+                      {/* Screenshot / Cash photo */}
+                      {pay.screenshot && (
+                        <View style={{ marginTop: 10 }}>
+                          <Text style={styles.payHistoryLabel}>
+                            {pay.paymentMode === "cash" ? "📷 Cash Photo" : "📸 Payment Screenshot"}
+                          </Text>
+                          <TouchableOpacity
+                            activeOpacity={0.85}
+                            onPress={() => setFullImg(pay.screenshot)}
+                          >
+                            <Image
+                              source={{ uri: pay.screenshot }}
+                              style={styles.payScreenshotImg}
+                              resizeMode="cover"
+                            />
+                            <Text style={{ fontSize: 10, fontFamily: "Inter_400Regular", color: "#3E7B27", textAlign: "center", marginTop: 4 }}>Tap to view full</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </View>
+                  ))
+                )}
+              </View>
+
               {/* Booking ID */}
               <View style={styles.detailSection}>
                 <Text style={styles.detailSectionTitle}>Booking Reference</Text>
@@ -666,6 +763,18 @@ export default function AdminAppointments() {
                 </TouchableOpacity>
               )}
             </ScrollView>
+          )}
+
+          {/* Full Image Viewer — inside detail modal so it renders on top */}
+          {fullImg && (
+            <TouchableOpacity
+              style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.95)", justifyContent: "center", alignItems: "center", zIndex: 999 }}
+              activeOpacity={1}
+              onPress={() => setFullImg(null)}
+            >
+              <Image source={{ uri: fullImg }} style={{ width: "95%", height: "75%", borderRadius: 12 }} resizeMode="contain" />
+              <Text style={{ color: "#aaa", fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 16 }}>Tap anywhere to close</Text>
+            </TouchableOpacity>
           )}
         </SafeAreaView>
       </Modal>
@@ -868,7 +977,7 @@ const styles = StyleSheet.create({
   modalContainer: { flex: 1, backgroundColor: "#0B3D2E" },
   modalHeader: {
     backgroundColor: "#0B3D2E", paddingHorizontal: 20,
-    paddingTop: 52, paddingBottom: 16,
+    paddingTop: 16, paddingBottom: 16,
     flexDirection: "row", alignItems: "center", gap: 12,
   },
   modalClose: { width: 36, height: 36, justifyContent: "center" },
@@ -885,6 +994,27 @@ const styles = StyleSheet.create({
     gap: 8, elevation: 3,
   },
   downloadBtnText: { fontSize: 15, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
+
+  // Payment History
+  payHistoryCard: {
+    backgroundColor: "#F8FFF8", borderRadius: 12,
+    borderWidth: 1, borderColor: "#D4EDD4", padding: 12, marginTop: 8,
+  },
+  payHistoryTop: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
+  payModeBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  payModeBadgeTxt: { fontSize: 11, fontFamily: "Poppins_700Bold" },
+  payHistoryAmt: { fontSize: 16, fontFamily: "Poppins_700Bold", color: "#0B3D2E", flex: 1 },
+  payHistoryTime: { fontSize: 10, fontFamily: "Inter_400Regular", color: "#999" },
+  payHistoryRow: {
+    flexDirection: "row", alignItems: "flex-start", gap: 8,
+    paddingVertical: 6, borderTopWidth: 1, borderTopColor: "#E8F5E8",
+  },
+  payHistoryLabel: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#666", width: 90 },
+  payHistoryValue: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#0B3D2E", flex: 1 },
+  payScreenshotImg: {
+    width: "100%", height: 180, borderRadius: 10,
+    marginTop: 6, borderWidth: 1, borderColor: "#D4EDD4",
+  },
 });
 
 function DetailRow({ icon, label, value, last }) {

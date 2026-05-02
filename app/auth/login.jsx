@@ -208,7 +208,8 @@ function ForgotPasswordModal({ visible, onClose, role }) {
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
-      <View style={fp.overlay}>
+      <KeyboardAvoidingView style={fp.overlay} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+        <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={handleClose} />
         <View style={fp.sheet}>
           {/* Header */}
           <View style={fp.header}>
@@ -336,7 +337,7 @@ function ForgotPasswordModal({ visible, onClose, role }) {
             </View>
           )}
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
