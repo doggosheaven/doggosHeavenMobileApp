@@ -55,21 +55,54 @@ export default function EditProfileScreen() {
     setLoading(true);
     try {
       const { token, user } = await getAuth();
+      let savedPhotoUrl = user?.profilePhoto || user?.profileImage || null;
 
+      // Step 1: Upload photo if new one selected
+      const isNewPhoto = image && (image.startsWith("file") || image.startsWith("content"));
+      if (isNewPhoto) {
+        const photoForm = new FormData();
+        photoForm.append("profilePhoto", {
+          uri: image,
+          name: "profile.jpg",
+          type: "image/jpeg",
+        });
+        const photoRes = await fetch(`${BASE_URL}/api/v1/auth/updateprofilephoto`, {
+          method: "PUT",
+          headers: { Authorization: token || "" },
+          body: photoForm,
+        });
+        const photoData = await photoRes.json();
+        if (photoData.success) {
+          savedPhotoUrl = photoData.profilePhoto;
+        } else {
+          Alert.alert("Error", photoData.message || "Failed to upload photo.");
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Step 2: Update name + phone
+      const updateBody = JSON.stringify({ fullName: form.fullName.trim(), phone: form.phone.trim() });
+      console.log("Sending updateprofile body:", updateBody);
       const res = await fetch(`${BASE_URL}/api/v1/auth/updateprofile`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json", Authorization: token || "" },
-        body: JSON.stringify({ fullName: form.fullName.trim(), phone: form.phone.trim() }),
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          Authorization: token || "",
+        },
+        body: updateBody,
       });
       const data = await res.json();
+      console.log("updateprofile response:", data);
 
       if (data.success) {
         await saveAuth(token, {
           ...user,
           fullName: form.fullName.trim(),
           phone: form.phone.trim(),
-          profilePhoto: image || user?.profilePhoto || user?.profileImage || null,
-          profileImage: image || user?.profilePhoto || user?.profileImage || null,
+          profilePhoto: savedPhotoUrl,
+          profileImage: savedPhotoUrl,
         });
         Alert.alert("Success", "Profile updated successfully!", [
           { text: "OK", onPress: () => router.replace("/(tabs)/profile") },

@@ -29,6 +29,9 @@ export default function AdminStaff() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detail, setDetail] = useState(null);
   const [historyTab, setHistoryTab] = useState("visits");
+  const [revenueDate, setRevenueDate] = useState("");
+  const [revenueData, setRevenueData] = useState(null);
+  const [revenueLoading, setRevenueLoading] = useState(false);
 
   const loadStaff = useCallback(async () => {
     try {
@@ -72,6 +75,20 @@ export default function AdminStaff() {
       }
     } catch (e) { console.log(e); }
     finally { setDetailLoading(false); }
+  };
+
+  const fetchRevenue = async (staffId, date = "") => {
+    setRevenueLoading(true);
+    try {
+      const { token: t } = await getAuth();
+      const url = date
+        ? `${BASE_URL}/api/v1/auth/staffrevenue/${staffId}?date=${date}`
+        : `${BASE_URL}/api/v1/auth/staffrevenue/${staffId}`;
+      const res = await fetch(url, { headers: { Authorization: t || "" } });
+      const data = await res.json();
+      if (data.success) setRevenueData(data);
+    } catch (e) { console.log(e); }
+    finally { setRevenueLoading(false); }
   };
 
   const openAdd = () => {
@@ -300,11 +317,17 @@ export default function AdminStaff() {
                         { key: "pets",         label: "Pet Master",   icon: "heart",    count: detail.recentPets?.length },
                         { key: "inventory",    label: "Inventory",    icon: "cube",     count: detail.inventoryItems?.length },
                         { key: "prescriptions",label: "Prescriptions",icon: "medical",  count: detail.prescriptions?.length },
+                        { key: "revenue",      label: "Revenue",      icon: "cash",     count: 0 },
                       ].map(tab => (
                         <TouchableOpacity
                           key={tab.key}
                           style={[s.tab, historyTab === tab.key && s.tabActive]}
-                          onPress={() => setHistoryTab(tab.key)}
+                          onPress={() => {
+                            setHistoryTab(tab.key);
+                            if (tab.key === "revenue" && !revenueData) {
+                              fetchRevenue(detail.staff._id);
+                            }
+                          }}
                           activeOpacity={0.8}
                         >
                           <Ionicons name={tab.icon} size={13} color={historyTab === tab.key ? "#fff" : "#3E7B27"} />
@@ -495,13 +518,113 @@ export default function AdminStaff() {
                               <Text style={s.historyTime}>{fmtDateTime(pet.createdAt)}</Text>
                             </View>
                             <Text style={s.historySub}>
-                              {pet.species || ""}{pet.breed ? `  •  ${pet.breed}` : ""}{pet.owner?.name ? `  •  ${pet.owner.name}` : ""}
+                              {pet.species || ""}{pet.breed ? `  \u2022  ${pet.breed}` : ""}{pet.owner?.name ? `  \u2022  ${pet.owner.name}` : ""}
                             </Text>
                           </View>
                         </View>
                       ))
                     )
                   )}
+
+                  {/* Revenue Tab */}
+                  {historyTab === "revenue" && (
+                    <View style={{ padding: 14 }}>
+                      <View style={s.revDateRow}>
+                        <TextInput
+                          style={s.revDateInput}
+                          value={revenueDate}
+                          onChangeText={setRevenueDate}
+                          placeholder="YYYY-MM-DD (optional)"
+                          placeholderTextColor="#aaa"
+                        />
+                        <TouchableOpacity
+                          style={s.revFetchBtn}
+                          onPress={() => fetchRevenue(detail.staff._id, revenueDate)}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="search" size={15} color="#fff" />
+                          <Text style={s.revFetchBtnTxt}>Filter</Text>
+                        </TouchableOpacity>
+                        {revenueDate ? (
+                          <TouchableOpacity
+                            style={[s.revFetchBtn, { backgroundColor: "#999" }]}
+                            onPress={() => { setRevenueDate(""); fetchRevenue(detail.staff._id, ""); }}
+                            activeOpacity={0.8}
+                          >
+                            <Ionicons name="close" size={15} color="#fff" />
+                          </TouchableOpacity>
+                        ) : null}
+                      </View>
+
+                      {revenueLoading ? (
+                        <ActivityIndicator color="#0B3D2E" style={{ marginVertical: 20 }} />
+                      ) : revenueData ? (
+                        <>
+                          <View style={s.revSummaryRow}>
+                            {[
+                              { label: "Total", val: revenueData.totalRevenue, bg: "#0B3D2E" },
+                              { label: "Visits", val: revenueData.visitRevenue, bg: "#1A5C3A" },
+                              { label: "Bookings", val: revenueData.apptRevenue, bg: "#3E7B27" },
+                            ].map(c => (
+                              <View key={c.label} style={[s.revCard, { backgroundColor: c.bg }]}>
+                                <Text style={s.revCardLabel}>{c.label}</Text>
+                                <Text style={s.revCardVal}>{"\u20b9"}{c.val}</Text>
+                              </View>
+                            ))}
+                          </View>
+
+                          {revenueData.visits?.length > 0 && (
+                            <>
+                              <Text style={[s.secTitle, { marginTop: 10 }]}>Visits ({revenueData.visits.length})</Text>
+                              {revenueData.visits.map((v, i) => (
+                                <View key={v._id || i} style={s.revItem}>
+                                  <Text style={{ fontSize: 18, marginRight: 8 }}>{v.visitType?.emoji || "\ud83d\udc3e"}</Text>
+                                  <View style={{ flex: 1 }}>
+                                    <Text style={s.revItemLabel}>{v.visitType?.purpose || "Visit"}</Text>
+                                    <Text style={s.revItemSub}>{v.pet?.name || ""}{v.pet?.owner?.name ? " \u2022 " + v.pet.owner.name : ""}</Text>
+                                    <Text style={s.revItemDate}>{fmtDateTime(v.createdAt)}</Text>
+                                  </View>
+                                  <Text style={s.revItemAmt}>{"\u20b9"}{v.details?.finalPrice || 0}</Text>
+                                </View>
+                              ))}
+                            </>
+                          )}
+
+                          {revenueData.appointments?.length > 0 && (
+                            <>
+                              <Text style={[s.secTitle, { marginTop: 10 }]}>Bookings ({revenueData.appointments.length})</Text>
+                              {revenueData.appointments.map((a, i) => (
+                                <View key={a._id || i} style={s.revItem}>
+                                  <View style={[s.historyIconBox, { backgroundColor: "#E8F5E8", marginRight: 8 }]}>
+                                    <Ionicons name="calendar" size={16} color="#0B3D2E" />
+                                  </View>
+                                  <View style={{ flex: 1 }}>
+                                    <Text style={s.revItemLabel}>{a.serviceName || "Booking"}</Text>
+                                    <Text style={s.revItemSub}>{a.petName || ""}{a.customerId?.fullName ? " \u2022 " + a.customerId.fullName : ""}</Text>
+                                    <Text style={s.revItemDate}>{fmtDateTime(a.createdAt)}</Text>
+                                  </View>
+                                  <Text style={s.revItemAmt}>{"\u20b9"}{a.totalAmount || 0}</Text>
+                                </View>
+                              ))}
+                            </>
+                          )}
+
+                          {revenueData.visits?.length === 0 && revenueData.appointments?.length === 0 && (
+                            <View style={s.noData}>
+                              <Ionicons name="cash-outline" size={32} color="#A8D96C" />
+                              <Text style={s.noDataTxt}>No revenue{revenueDate ? " on this date" : ""}</Text>
+                            </View>
+                          )}
+                        </>
+                      ) : (
+                        <View style={s.noData}>
+                          <Ionicons name="cash-outline" size={32} color="#A8D96C" />
+                          <Text style={s.noDataTxt}>Tap Filter to load revenue</Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+
                 </View>
 
                 <View style={{ height: 24 }} />
@@ -781,4 +904,30 @@ const s = StyleSheet.create({
     gap: 8, marginBottom: 10,
   },
   saveBtnTxt: { fontSize: 15, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
+
+  // Revenue tab
+  revDateRow: { flexDirection: "row", gap: 8, marginBottom: 12, alignItems: "center" },
+  revDateInput: {
+    flex: 1, borderWidth: 1, borderColor: "#D4EDD4", borderRadius: 10,
+    backgroundColor: "#F0F7F0", paddingHorizontal: 12, height: 40,
+    fontSize: 13, fontFamily: "Inter_400Regular", color: "#1A1A1A",
+  },
+  revFetchBtn: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    backgroundColor: "#0B3D2E", borderRadius: 10,
+    paddingHorizontal: 12, height: 40,
+  },
+  revFetchBtnTxt: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
+  revSummaryRow: { flexDirection: "row", gap: 8, marginBottom: 8 },
+  revCard: { flex: 1, borderRadius: 12, padding: 10, alignItems: "center" },
+  revCardLabel: { fontSize: 10, fontFamily: "Inter_400Regular", color: "#A8D96C", marginBottom: 3 },
+  revCardVal: { fontSize: 16, fontFamily: "Poppins_700Bold", color: "#fff" },
+  revItem: {
+    flexDirection: "row", alignItems: "center",
+    paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#F0F7F0",
+  },
+  revItemLabel: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+  revItemSub: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#666", marginTop: 1 },
+  revItemDate: { fontSize: 10, fontFamily: "Inter_400Regular", color: "#aaa", marginTop: 1 },
+  revItemAmt: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#3E7B27", marginLeft: 8 },
 });
