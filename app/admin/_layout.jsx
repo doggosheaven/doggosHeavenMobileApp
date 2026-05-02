@@ -2,6 +2,29 @@ import { Stack, useRouter, usePathname } from "expo-router";
 import { View, TouchableOpacity, Text, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useEffect } from "react";
+import * as Notifications from "expo-notifications";
+import { getAuth } from "../../utils/authStorage";
+import { BASE_URL } from "../../constants/api";
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({ shouldShowAlert: true, shouldPlaySound: true, shouldSetBadge: true }),
+});
+
+async function registerAdminPushToken() {
+  try {
+    const { status } = await Notifications.requestPermissionsAsync();
+    if (status !== "granted") return;
+    const { data: token } = await Notifications.getExpoPushTokenAsync();
+    const { token: authToken, user } = await getAuth();
+    if (!user?.id && !user?._id) return;
+    await fetch(`${BASE_URL}/api/v1/customerappointment/savepushtoken`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: authToken || "" },
+      body: JSON.stringify({ userId: user.id || user._id, expoPushToken: token }),
+    });
+  } catch {}
+}
 
 const TABS = [
   { name: "dashboard",        label: "Home",    icon: "grid-outline" },
@@ -43,6 +66,8 @@ function AdminTabBar() {
 }
 
 export default function AdminLayout() {
+  useEffect(() => { registerAdminPushToken(); }, []);
+
   return (
     <View style={{ flex: 1 }}>
       <Stack screenOptions={{ headerShown: false, gestureEnabled: true, gestureDirection: "horizontal" }}>

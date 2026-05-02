@@ -10,6 +10,102 @@ import { useRouter } from "expo-router";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
 
+const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const DAY_NAMES   = ["Su","Mo","Tu","We","Th","Fr","Sa"];
+
+function CalendarModal({ visible, selectedDate, onSelect, onClose }) {
+  const [calMonth, setCalMonth] = useState(selectedDate || new Date());
+  const year  = calMonth.getFullYear();
+  const month = calMonth.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstDay    = new Date(year, month, 1).getDay();
+  const isSameDay   = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
+
+  // Fixed 6-row grid — always 42 cells
+  const cells = [];
+  for (let i = 0; i < firstDay; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  while (cells.length < 42) cells.push(null);
+
+  const CELL = 36; // fixed cell size
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <TouchableOpacity style={cal.overlay} activeOpacity={1} onPress={onClose}>
+        <TouchableOpacity activeOpacity={1} style={cal.box}>
+          <View style={cal.header}>
+            <TouchableOpacity onPress={() => setCalMonth(new Date(year, month-1, 1))} hitSlop={{top:8,bottom:8,left:8,right:8}}>
+              <Ionicons name="chevron-back" size={20} color="#0B3D2E" />
+            </TouchableOpacity>
+            <Text style={cal.monthTxt}>{MONTH_NAMES[month]} {year}</Text>
+            <TouchableOpacity onPress={() => setCalMonth(new Date(year, month+1, 1))} hitSlop={{top:8,bottom:8,left:8,right:8}}>
+              <Ionicons name="chevron-forward" size={20} color="#0B3D2E" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Day names row */}
+          <View style={cal.dayRow}>
+            {DAY_NAMES.map(d => (
+              <View key={d} style={{ width: CELL, alignItems: "center" }}>
+                <Text style={cal.dayName}>{d}</Text>
+              </View>
+            ))}
+          </View>
+
+          {/* Calendar grid — 6 rows x 7 cols */}
+          {[0,1,2,3,4,5].map(row => (
+            <View key={row} style={{ flexDirection: "row", marginBottom: 2 }}>
+              {[0,1,2,3,4,5,6].map(col => {
+                const day = cells[row * 7 + col];
+                if (!day) return <View key={col} style={{ width: CELL, height: CELL }} />;
+                const thisDate = new Date(year, month, day);
+                const isSel   = selectedDate && isSameDay(thisDate, selectedDate);
+                const isToday = isSameDay(thisDate, new Date());
+                return (
+                  <TouchableOpacity
+                    key={col}
+                    style={[cal.day, { width: CELL, height: CELL }, isSel && cal.daySelected, isToday && !isSel && cal.dayToday]}
+                    onPress={() => { onSelect(thisDate); onClose(); }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[cal.dayTxt, isSel && cal.dayTxtSelected, isToday && !isSel && cal.dayTxtToday]}>{day}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ))}
+
+          <View style={{ flexDirection: "row", gap: 10, marginTop: 14 }}>
+            <TouchableOpacity style={[cal.todayBtn, { flex: 1, backgroundColor: "#F0F7F0" }]} onPress={() => { onSelect(new Date()); onClose(); }} activeOpacity={0.8}>
+              <Text style={[cal.todayBtnTxt, { color: "#0B3D2E" }]}>Today</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[cal.todayBtn, { flex: 1 }]} onPress={() => { onSelect(null); onClose(); }} activeOpacity={0.8}>
+              <Text style={cal.todayBtnTxt}>All Dates</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+  );
+}
+
+const cal = StyleSheet.create({
+  overlay: {flex:1,backgroundColor:"rgba(0,0,0,0.45)",justifyContent:"center",alignItems:"center"},
+  box: {backgroundColor:"#fff",borderRadius:20,padding:20,width:"88%",elevation:10},
+  header: {flexDirection:"row",justifyContent:"space-between",alignItems:"center",marginBottom:14},
+  monthTxt: {fontSize:16,fontFamily:"Poppins_700Bold",color:"#0B3D2E"},
+  dayRow: {flexDirection:"row",marginBottom:6},
+  dayName: {fontSize:11,fontFamily:"Poppins_700Bold",color:"#3E7B27",textAlign:"center"},
+  day: {justifyContent:"center",alignItems:"center",borderRadius:8},
+  daySelected: {backgroundColor:"#0B3D2E"},
+  dayToday: {backgroundColor:"#E8F5E8",borderWidth:1.5,borderColor:"#3E7B27"},
+  dayTxt: {fontSize:13,fontFamily:"Inter_400Regular",color:"#1A1A1A"},
+  dayTxtSelected: {fontFamily:"Poppins_700Bold",color:"#A8D96C"},
+  dayTxtToday: {fontFamily:"Poppins_700Bold",color:"#0B3D2E"},
+  todayBtn: {backgroundColor:"#0B3D2E",borderRadius:12,paddingVertical:12,alignItems:"center"},
+  todayBtnTxt: {fontSize:14,fontFamily:"Poppins_700Bold",color:"#A8D96C"},
+});
+
 const emptyForm = () => ({ fullName: "", email: "", password: "" });
 
 export default function AdminStaff() {
@@ -29,7 +125,8 @@ export default function AdminStaff() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detail, setDetail] = useState(null);
   const [historyTab, setHistoryTab] = useState("visits");
-  const [revenueDate, setRevenueDate] = useState("");
+  const [revenueDate, setRevenueDate] = useState(null);
+  const [showRevCal, setShowRevCal] = useState(false);
   const [revenueData, setRevenueData] = useState(null);
   const [revenueLoading, setRevenueLoading] = useState(false);
 
@@ -77,14 +174,15 @@ export default function AdminStaff() {
     finally { setDetailLoading(false); }
   };
 
-  const fetchRevenue = async (staffId, date = "") => {
+  const fetchRevenue = async (staffId, date = null) => {
     setRevenueLoading(true);
     try {
       const { token: t } = await getAuth();
-      const url = date
-        ? `${BASE_URL}/api/v1/auth/staffrevenue/${staffId}?date=${date}`
+      const dateStr = date ? date.toISOString().split('T')[0] : '';
+      const url = dateStr
+        ? `${BASE_URL}/api/v1/auth/staffrevenue/${staffId}?date=${dateStr}`
         : `${BASE_URL}/api/v1/auth/staffrevenue/${staffId}`;
-      const res = await fetch(url, { headers: { Authorization: t || "" } });
+      const res = await fetch(url, { headers: { Authorization: t || '' } });
       const data = await res.json();
       if (data.success) setRevenueData(data);
     } catch (e) { console.log(e); }
@@ -529,32 +627,48 @@ export default function AdminStaff() {
                   {/* Revenue Tab */}
                   {historyTab === "revenue" && (
                     <View style={{ padding: 14 }}>
+                      {/* Date Picker */}
                       <View style={s.revDateRow}>
-                        <TextInput
-                          style={s.revDateInput}
-                          value={revenueDate}
-                          onChangeText={setRevenueDate}
-                          placeholder="YYYY-MM-DD (optional)"
-                          placeholderTextColor="#aaa"
-                        />
+                        <TouchableOpacity
+                          style={s.revDatePickerBtn}
+                          onPress={() => setShowRevCal(true)}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="calendar-outline" size={16} color="#0B3D2E" />
+                          <Text style={s.revDatePickerTxt}>
+                            {revenueDate
+                              ? revenueDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+                              : "Select Date (optional)"}
+                          </Text>
+                          {revenueDate && (
+                            <TouchableOpacity
+                              onPress={() => { setRevenueDate(null); fetchRevenue(detail.staff._id, null); }}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            >
+                              <Ionicons name="close-circle" size={16} color="#C62828" />
+                            </TouchableOpacity>
+                          )}
+                        </TouchableOpacity>
                         <TouchableOpacity
                           style={s.revFetchBtn}
                           onPress={() => fetchRevenue(detail.staff._id, revenueDate)}
                           activeOpacity={0.8}
                         >
                           <Ionicons name="search" size={15} color="#fff" />
-                          <Text style={s.revFetchBtnTxt}>Filter</Text>
+                          <Text style={s.revFetchBtnTxt}>Load</Text>
                         </TouchableOpacity>
-                        {revenueDate ? (
-                          <TouchableOpacity
-                            style={[s.revFetchBtn, { backgroundColor: "#999" }]}
-                            onPress={() => { setRevenueDate(""); fetchRevenue(detail.staff._id, ""); }}
-                            activeOpacity={0.8}
-                          >
-                            <Ionicons name="close" size={15} color="#fff" />
-                          </TouchableOpacity>
-                        ) : null}
                       </View>
+
+                      <CalendarModal
+                        visible={showRevCal}
+                        selectedDate={revenueDate}
+                        onSelect={(d) => {
+                          setRevenueDate(d);
+                          if (d) fetchRevenue(detail.staff._id, d);
+                          else fetchRevenue(detail.staff._id, null);
+                        }}
+                        onClose={() => setShowRevCal(false)}
+                      />
 
                       {revenueLoading ? (
                         <ActivityIndicator color="#0B3D2E" style={{ marginVertical: 20 }} />
@@ -907,11 +1021,12 @@ const s = StyleSheet.create({
 
   // Revenue tab
   revDateRow: { flexDirection: "row", gap: 8, marginBottom: 12, alignItems: "center" },
-  revDateInput: {
-    flex: 1, borderWidth: 1, borderColor: "#D4EDD4", borderRadius: 10,
+  revDatePickerBtn: {
+    flex: 1, flexDirection: "row", alignItems: "center", gap: 8,
+    borderWidth: 1, borderColor: "#D4EDD4", borderRadius: 10,
     backgroundColor: "#F0F7F0", paddingHorizontal: 12, height: 40,
-    fontSize: 13, fontFamily: "Inter_400Regular", color: "#1A1A1A",
   },
+  revDatePickerTxt: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", color: "#0B3D2E" },
   revFetchBtn: {
     flexDirection: "row", alignItems: "center", gap: 4,
     backgroundColor: "#0B3D2E", borderRadius: 10,
