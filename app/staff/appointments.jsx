@@ -100,16 +100,22 @@ const handleUpdateStatus = async (id, status, extraBody = {}) => {
           onPress: async () => {
             const { status } = await ImagePicker.requestCameraPermissionsAsync();
             if (status !== "granted") return Alert.alert("Permission needed", "Please allow camera access.");
-            const result = await ImagePicker.launchCameraAsync({ quality: 0.7 });
+            const result = await ImagePicker.launchCameraAsync({
+              mediaTypes: ["images"],
+              quality: 0.7,
+              allowsMultipleSelection: false,
+            });
             if (!result.canceled) setPayScreenshot(result.assets[0]);
           },
         },
         {
           text: "Gallery",
           onPress: async () => {
-            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-            if (status !== "granted") return Alert.alert("Permission needed", "Please allow photo access.");
-            const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.7 });
+            const result = await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ["images"],
+              quality: 0.7,
+              allowsMultipleSelection: false,
+            });
             if (!result.canceled) setPayScreenshot(result.assets[0]);
           },
         },

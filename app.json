@@ -19,7 +19,7 @@
     },
     "android": {
       "package": "com.doggosheaven.app",
-      "versionCode": 8,
+      "versionCode": 9,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/doggoswhite.png",
         "backgroundColor": "#0B3D2E"
@@ -27,7 +27,9 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "permissions": [
-        "android.permission.CAMERA"
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
       ]
     },
     "web": {
@@ -58,8 +60,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow Doggos Heaven to access your photos to upload pet pictures.",
-          "cameraPermission": "Allow Doggos Heaven to use your camera to take pet photos.",
+          "photosPermission": "Allow Doggos Heaven to access your photos to upload payment proof.",
+          "cameraPermission": "Allow Doggos Heaven to use your camera to take payment photos.",
           "microphonePermission": false
         }
       ]
