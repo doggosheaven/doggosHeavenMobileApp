@@ -1,11 +1,11 @@
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from "react-native";
 import { useState } from "react";
 import { useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
 import * as Notifications from "expo-notifications";
 import { BASE_URL } from "../constants/api";
 import { saveAuth } from "../utils/authStorage";
 import { getGoogleIdToken, statusCodes, isErrorWithCode } from "../utils/googleSignIn";
+import GoogleGIcon from "./GoogleGIcon";
 
 // One button that both signs up and logs in a customer via Google.
 export default function GoogleAuthButton({ label = "Continue with Google" }) {
@@ -69,7 +69,7 @@ export default function GoogleAuthButton({ label = "Continue with Google" }) {
           <ActivityIndicator color="#0B3D2E" />
         ) : (
           <>
-            <Ionicons name="logo-google" size={20} color="#DB4437" />
+            <GoogleGIcon size={20} />
             <Text style={s.btnText}>{label}</Text>
           </>
         )}
