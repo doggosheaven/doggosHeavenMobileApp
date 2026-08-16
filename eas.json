@@ -10,7 +10,9 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://doggos-heaven-app-backend.vercel.app"
+        "EXPO_PUBLIC_BACKEND_URL": "https://api.doggosheaven.com",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "588004109708-us9nvd4gifd90mtnadsvr5dour3ds7sp.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "588004109708-0tjpf3kmuqes4si3vnodu5jp11gf3ubm.apps.googleusercontent.com"
       }
     },
     "preview": {
@@ -18,7 +20,9 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://doggos-heaven-app-backend.vercel.app"
+        "EXPO_PUBLIC_BACKEND_URL": "https://api.doggosheaven.com",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "588004109708-us9nvd4gifd90mtnadsvr5dour3ds7sp.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "588004109708-0tjpf3kmuqes4si3vnodu5jp11gf3ubm.apps.googleusercontent.com"
       }
     },
     "production": {
@@ -27,7 +31,9 @@
       },
       "ios": {},
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://doggos-heaven-app-backend.vercel.app"
+        "EXPO_PUBLIC_BACKEND_URL": "https://api.doggosheaven.com",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "588004109708-us9nvd4gifd90mtnadsvr5dour3ds7sp.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "588004109708-0tjpf3kmuqes4si3vnodu5jp11gf3ubm.apps.googleusercontent.com"
       }
     }
   }

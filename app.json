@@ -19,7 +19,7 @@
     },
     "android": {
       "package": "com.doggosheaven.app",
-      "versionCode": 9,
+      "versionCode": 11,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/doggoswhite.png",
         "backgroundColor": "#0B3D2E"
@@ -63,6 +63,12 @@
           "photosPermission": "Allow Doggos Heaven to access your photos to upload payment proof.",
           "cameraPermission": "Allow Doggos Heaven to use your camera to take payment photos.",
           "microphonePermission": false
+        }
+      ],
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.588004109708-0tjpf3kmuqes4si3vnodu5jp11gf3ubm"
         }
       ]
     ],

@@ -8,6 +8,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Notifications from "expo-notifications";
 import { BASE_URL } from "../../constants/api";
 import { saveAuth } from "../../utils/authStorage";
+import GoogleAuthButton from "../../components/GoogleAuthButton";
 
 const ROLES = [
   { value: "customer", label: "Customer", icon: "person-outline" },
@@ -501,6 +502,8 @@ export default function LoginScreen() {
               <Ionicons name="key-outline" size={14} color="#3E7B27" />
               <Text style={styles.forgotTxt}>Forgot Password?</Text>
             </TouchableOpacity>
+
+            {role === "customer" && <GoogleAuthButton label="Continue with Google" />}
 
             {role === "customer" && (
               <View style={styles.footer}>

@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { BASE_URL } from "../../constants/api";
+import GoogleAuthButton from "../../components/GoogleAuthButton";
 
 export default function SignupScreen() {
   const router = useRouter();
@@ -122,6 +123,9 @@ export default function SignupScreen() {
               </>
             )}
           </TouchableOpacity>
+
+          {/* Google Sign-Up */}
+          <GoogleAuthButton label="Sign up with Google" />
 
           {/* Login Link */}
           <View style={s.footer}>
