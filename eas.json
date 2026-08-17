@@ -36,5 +36,13 @@
         "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "588004109708-0tjpf3kmuqes4si3vnodu5jp11gf3ubm.apps.googleusercontent.com"
       }
     }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleId": "shubh4592@icloud.com",
+        "appleTeamId": "2X2ST5K3T5"
+      }
+    }
   }
 }
