@@ -204,13 +204,18 @@ export default function AdminStaff() {
     if (!form.fullName.trim()) return Alert.alert("Error", "Full name is required.");
     if (!form.email.trim()) return Alert.alert("Error", "Email is required.");
     if (!editingId && form.password.length < 6) return Alert.alert("Error", "Password must be at least 6 characters.");
+    if (editingId && form.password && form.password.length < 6) return Alert.alert("Error", "Password must be at least 6 characters.");
     setSaving(true);
     try {
       const res = editingId
         ? await fetch(`${BASE_URL}/api/v1/auth/updatestaff/${editingId}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json", Authorization: token },
-            body: JSON.stringify({ fullName: form.fullName.trim(), email: form.email.trim() }),
+            body: JSON.stringify({
+              fullName: form.fullName.trim(),
+              email: form.email.trim(),
+              ...(form.password ? { password: form.password } : {}),
+            }),
           })
         : await fetch(`${BASE_URL}/api/v1/auth/signup`, {
             method: "POST",
@@ -228,7 +233,9 @@ export default function AdminStaff() {
   };
 
   const handleDelete = (id, name) => {
-    Alert.alert("Delete Staff", `Remove "${name}" from staff?`, [
+    Alert.alert("Remove Staff", `Remove "${name}" from staff?
+
+Their login is disabled immediately. Past visits, bills and prescriptions stay on record.`, [
       { text: "Cancel", style: "cancel" },
       {
         text: "Delete", style: "destructive", onPress: async () => {
@@ -778,20 +785,20 @@ export default function AdminStaff() {
               </View>
             </View>
 
-            {!editingId && (
-              <View style={s.formGroup}>
-                <Text style={s.label}>Password *</Text>
-                <View style={s.inputRow}>
-                  <Ionicons name="lock-closed-outline" size={18} color="#3E7B27" style={{ marginRight: 8 }} />
-                  <TextInput style={s.input} placeholder="Min 6 characters" placeholderTextColor="#aaa"
-                    secureTextEntry={!showPassword}
-                    value={form.password} onChangeText={(v) => setForm(p => ({ ...p, password: v }))} />
-                  <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                    <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color="#999" />
-                  </TouchableOpacity>
-                </View>
+            <View style={s.formGroup}>
+              <Text style={s.label}>{editingId ? "Reset Password" : "Password *"}</Text>
+              <View style={s.inputRow}>
+                <Ionicons name="lock-closed-outline" size={18} color="#3E7B27" style={{ marginRight: 8 }} />
+                <TextInput style={s.input}
+                  placeholder={editingId ? "Leave blank to keep current" : "Min 6 characters"}
+                  placeholderTextColor="#aaa"
+                  secureTextEntry={!showPassword}
+                  value={form.password} onChangeText={(v) => setForm(p => ({ ...p, password: v }))} />
+                <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                  <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color="#999" />
+                </TouchableOpacity>
               </View>
-            )}
+            </View>
 
             <View style={s.hint}>
               <Ionicons name="information-circle-outline" size={16} color="#3E7B27" />
