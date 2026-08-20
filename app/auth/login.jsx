@@ -398,8 +398,8 @@ export default function LoginScreen() {
             if (pushToken && data.user?.id) {
               fetch(`${BASE_URL}/api/v1/customerappointment/savepushtoken`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ userId: data.user.id, expoPushToken: pushToken }),
+                headers: { "Content-Type": "application/json", Authorization: data.token || "" },
+                body: JSON.stringify({ expoPushToken: pushToken }),
               }).catch(() => {});
             }
           }
