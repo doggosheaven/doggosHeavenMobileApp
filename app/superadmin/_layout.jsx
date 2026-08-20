@@ -7,6 +7,7 @@ import RoleGate from "../../components/RoleGate";
 const TABS = [
   { name: "dashboard", label: "Overview", icon: "speedometer-outline" },
   { name: "users",     label: "Users",    icon: "people-outline" },
+  { name: "revenue",   label: "Revenue",  icon: "podium-outline" },
   { name: "console",   label: "Console",  icon: "grid-outline" },
   { name: "profile",   label: "Profile",  icon: "person-outline" },
 ];

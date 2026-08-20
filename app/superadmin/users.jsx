@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput,
+  View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Image,
   ActivityIndicator, RefreshControl, Alert, Modal, KeyboardAvoidingView,
   Platform, StatusBar,
 } from "react-native";
@@ -33,7 +33,7 @@ export default function SuperAdminUsers() {
   const [meId, setMeId] = useState(null);
 
   const [roleFilter, setRoleFilter] = useState(params.role || "");
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(params.search || "");
   const [includeInactive, setIncludeInactive] = useState(params.includeInactive === "1");
 
   const [mode, setMode] = useState(null); // null | "edit" | "detail"
@@ -202,7 +202,7 @@ export default function SuperAdminUsers() {
       </View>
 
       {/* Role filter */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.chipRow} contentContainerStyle={s.chipRowInner}>
+      <View style={s.chipRow}>
         <TouchableOpacity
           style={[s.chip, !roleFilter && s.chipActive]}
           onPress={() => setRoleFilter("")}
@@ -231,7 +231,7 @@ export default function SuperAdminUsers() {
           <Ionicons name="pause-circle-outline" size={12} color={includeInactive ? "#0B3D2E" : "#8A9A8A"} />
           <Text style={[s.chipTxt, includeInactive && s.chipTxtActive]}>Deactivated</Text>
         </TouchableOpacity>
-      </ScrollView>
+      </View>
 
       {/* List */}
       {loading ? (
@@ -258,9 +258,13 @@ export default function SuperAdminUsers() {
                   onPress={() => openDetail(u)}
                   activeOpacity={0.85}
                 >
-                  <View style={[s.avatar, { backgroundColor: meta.tint }]}>
-                    <Text style={s.avatarTxt}>{initials(u.fullName)}</Text>
-                  </View>
+                  {u.profilePhoto ? (
+                    <Image source={{ uri: u.profilePhoto }} style={s.avatarImg} />
+                  ) : (
+                    <View style={[s.avatar, { backgroundColor: meta.tint }]}>
+                      <Text style={s.avatarTxt}>{initials(u.fullName)}</Text>
+                    </View>
+                  )}
                   <View style={{ flex: 1 }}>
                     <View style={s.nameRow}>
                       <Text style={s.name} numberOfLines={1}>{u.fullName}</Text>
@@ -384,6 +388,9 @@ export default function SuperAdminUsers() {
                   </View>
                   <Text style={s.metaTxt}>{detail.user.phone || "no phone"}</Text>
                   <Text style={s.metaTxt}>joined {fmt(detail.user.createdAt)}</Text>
+                  {detail.user.createdBy?.fullName && (
+                    <Text style={s.metaTxt}>added by {detail.user.createdBy.fullName}</Text>
+                  )}
                 </View>
 
                 {detailLoading ? (
@@ -471,8 +478,10 @@ const s = StyleSheet.create({
   },
   searchInput: { flex: 1, fontSize: 14, fontFamily: "Inter_400Regular", color: "#0B3D2E" },
 
-  chipRow: { maxHeight: 56 },
-  chipRowInner: { paddingHorizontal: 16, paddingVertical: 12, gap: 8 },
+  chipRow: {
+    flexDirection: "row", flexWrap: "wrap", gap: 8,
+    paddingHorizontal: 16, paddingVertical: 12,
+  },
   chip: {
     flexDirection: "row", alignItems: "center", gap: 5,
     backgroundColor: "#fff", borderRadius: 20, paddingHorizontal: 12, paddingVertical: 7,
@@ -493,7 +502,8 @@ const s = StyleSheet.create({
   },
   cardInactive: { opacity: 0.55 },
   avatar: { width: 42, height: 42, borderRadius: 21, justifyContent: "center", alignItems: "center" },
-  avatarTxt: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+  avatarTxt: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#fff" },
+  avatarImg: { width: 42, height: 42, borderRadius: 21, backgroundColor: "#E8F5E8" },
   nameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   name: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#0B3D2E", flexShrink: 1 },
   email: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#8A9A8A" },

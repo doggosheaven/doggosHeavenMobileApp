@@ -11,12 +11,12 @@ import { BASE_URL } from "../../constants/api";
 const STATUS_BAR_HEIGHT = Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 44;
 
 const ROLE_OPTIONS = {
-  admin:      [{ v: "customer", l: "Customer", i: "person" }, { v: "staff", l: "Staff", i: "briefcase" }],
+  admin:      [{ v: "customer", l: "Customer", i: "paw" }, { v: "staff", l: "Staff", i: "medkit" }],
+  // No superadmin here on purpose — the system keeps exactly one.
   superadmin: [
-    { v: "customer", l: "Customer", i: "person" },
-    { v: "staff", l: "Staff", i: "briefcase" },
-    { v: "admin", l: "Admin", i: "shield-half" },
-    { v: "superadmin", l: "Super Admin", i: "shield-checkmark" },
+    { v: "customer", l: "Customer", i: "paw" },
+    { v: "staff", l: "Staff", i: "medkit" },
+    { v: "admin", l: "Admin", i: "shield-checkmark" },
   ],
 };
 

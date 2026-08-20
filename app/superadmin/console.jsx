@@ -42,6 +42,7 @@ const GROUPS = [
   {
     title: "Money",
     items: [
+      { label: "Revenue by Person", icon: "podium-outline",           route: "/superadmin/revenue" },
       { label: "Revenue",          icon: "bar-chart-outline",         route: "/admin/revenue" },
       { label: "Booking Revenue",  icon: "cash-outline",              route: "/admin/bookingrevenueadmin" },
       { label: "Walk-in Billing",  icon: "receipt-outline",           route: "/admin/billing" },

@@ -13,24 +13,24 @@ import { registerCacheReset } from "../../utils/sessionCache";
 const STATUS_BAR_HEIGHT = Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 44;
 
 const ROLE_CARDS = [
-  { key: "superadmin", label: "Super Admins", icon: "shield-checkmark", tint: "#0B3D2E" },
-  { key: "admin",      label: "Admins",       icon: "shield-half",      tint: "#3E7B27" },
-  { key: "staff",      label: "Staff",        icon: "briefcase",        tint: "#7EC8E3" },
-  { key: "customer",   label: "Customers",    icon: "people",           tint: "#E8A0BF" },
+  { key: "superadmin", label: "Super Admins", icon: "key",             tint: "#0B3D2E" },
+  { key: "admin",      label: "Admins",       icon: "shield-checkmark", tint: "#3E7B27" },
+  { key: "staff",      label: "Staff",        icon: "medkit",           tint: "#7EC8E3" },
+  { key: "customer",   label: "Customers",    icon: "paw",              tint: "#E8A0BF" },
 ];
 
 const TOTAL_ROWS = [
-  { key: "pets",          label: "Pets",              icon: "paw-outline" },
-  { key: "owners",        label: "Pet Owners",        icon: "person-outline" },
-  { key: "visits",        label: "Visits",            icon: "clipboard-outline" },
-  { key: "appointments",  label: "Appointments",      icon: "calendar-outline" },
-  { key: "prescriptions", label: "Prescriptions",     icon: "medkit-outline" },
-  { key: "services",      label: "Services",          icon: "construct-outline" },
-  { key: "inventory",     label: "Inventory Items",   icon: "cube-outline" },
-  { key: "bills",         label: "Bills",             icon: "receipt-outline" },
-  { key: "boardings",     label: "Boardings",         icon: "home-outline" },
-  { key: "activeBoardingSubscriptions", label: "Active Boarding Subs", icon: "repeat-outline" },
-  { key: "unreadAlerts",  label: "Unread Alerts",     icon: "notifications-outline" },
+  { key: "pets",          label: "Pets",              icon: "paw-outline",           route: "/admin/petmaster" },
+  { key: "owners",        label: "Pet Owners",        icon: "people-outline",        route: "/admin/petmaster" },
+  { key: "visits",        label: "Visits",            icon: "clipboard-outline",     route: "/admin/totalvisits" },
+  { key: "appointments",  label: "Appointments",      icon: "calendar-outline",      route: "/admin/appointments" },
+  { key: "prescriptions", label: "Prescriptions",     icon: "medkit-outline",        route: "/admin/prescription" },
+  { key: "services",      label: "Services",          icon: "construct-outline",     route: "/admin/services" },
+  { key: "inventory",     label: "Inventory Items",   icon: "cube-outline",          route: "/admin/inventory" },
+  { key: "bills",         label: "Bills",             icon: "receipt-outline",       route: "/admin/billhistory" },
+  { key: "boardings",     label: "Boardings",         icon: "home-outline",          route: "/admin/deboard" },
+  { key: "activeBoardingSubscriptions", label: "Active Boarding Subs", icon: "repeat-outline", route: "/admin/boardingsubscriptions" },
+  { key: "unreadAlerts",  label: "Unread Alerts",     icon: "notifications-outline", route: "/admin/notifications" },
 ];
 
 let _cached = null;
@@ -75,7 +75,7 @@ export default function SuperAdminDashboard() {
           <Text style={s.headerTitle}>Everything, at a glance</Text>
         </View>
         <View style={s.crown}>
-          <Ionicons name="shield-checkmark" size={20} color="#0B3D2E" />
+          <Ionicons name="paw" size={20} color="#0B3D2E" />
         </View>
       </View>
 
@@ -118,25 +118,31 @@ export default function SuperAdminDashboard() {
         {/* Money */}
         <Text style={s.sectionTitle}>Money</Text>
         <View style={s.moneyRow}>
-          <View style={s.moneyCard}>
+          <TouchableOpacity style={s.moneyCard} activeOpacity={0.85} onPress={() => router.push("/superadmin/revenue")}>
             <Text style={s.moneyValue}>{money(data?.money?.billedTotal)}</Text>
             <Text style={s.moneyLabel}>Billed total</Text>
-          </View>
-          <View style={s.moneyCard}>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.moneyCard} activeOpacity={0.85} onPress={() => router.push("/admin/boardingsubscriptions")}>
             <Text style={s.moneyValue}>{money(data?.money?.walletBalanceHeld)}</Text>
             <Text style={s.moneyLabel}>Wallet balance held</Text>
-          </View>
+          </TouchableOpacity>
         </View>
 
         {/* Everything else */}
         <Text style={s.sectionTitle}>Records</Text>
         <View style={s.list}>
           {TOTAL_ROWS.map((row, i) => (
-            <View key={row.key} style={[s.listRow, i === TOTAL_ROWS.length - 1 && { borderBottomWidth: 0 }]}>
-              <Ionicons name={row.icon} size={17} color="#A8D96C" style={{ width: 26 }} />
+            <TouchableOpacity
+              key={row.key}
+              style={[s.listRow, i === TOTAL_ROWS.length - 1 && { borderBottomWidth: 0 }]}
+              onPress={() => router.push(row.route)}
+              activeOpacity={0.6}
+            >
+              <Ionicons name={row.icon} size={17} color="#3E7B27" style={{ width: 26 }} />
               <Text style={s.listLabel}>{row.label}</Text>
               <Text style={s.listValue}>{data?.totals?.[row.key] ?? 0}</Text>
-            </View>
+              <Ionicons name="chevron-forward" size={15} color="#B9C9B9" style={{ marginLeft: 6 }} />
+            </TouchableOpacity>
           ))}
         </View>
 
