@@ -13,6 +13,7 @@ const GROUPS = [
     title: "People & access",
     items: [
       { label: "All Users",        icon: "people-outline",            route: "/superadmin/users" },
+      { label: "Add Person",       icon: "person-add-outline",        route: "/superadmin/adduser" },
       { label: "Staff & Revenue",  icon: "briefcase-outline",         route: "/admin/staff" },
       { label: "Unblock Requests", icon: "lock-open-outline",         route: "/admin/unblock-requests" },
       { label: "Blacklisted Pets", icon: "ban-outline",               route: "/admin/blacklisted" },

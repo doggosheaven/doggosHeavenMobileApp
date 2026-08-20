@@ -20,8 +20,6 @@ const ROLES = [
 ];
 const roleMeta = (r) => ROLES.find((x) => x.value === r) || ROLES[3];
 
-const emptyForm = () => ({ fullName: "", email: "", phone: "", password: "", role: "staff" });
-
 export default function SuperAdminUsers() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -38,9 +36,9 @@ export default function SuperAdminUsers() {
   const [search, setSearch] = useState("");
   const [includeInactive, setIncludeInactive] = useState(params.includeInactive === "1");
 
-  const [mode, setMode] = useState(null); // null | "add" | "edit" | "detail"
+  const [mode, setMode] = useState(null); // null | "edit" | "detail"
   const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState(emptyForm());
+  const [form, setForm] = useState({ fullName: "", email: "", phone: "", password: "", role: "staff" });
   const [saving, setSaving] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [detail, setDetail] = useState(null);
@@ -81,10 +79,9 @@ export default function SuperAdminUsers() {
   };
   useEffect(() => () => searchTimer.current && clearTimeout(searchTimer.current), []);
 
-  const openAdd = () => {
-    setForm({ ...emptyForm(), role: roleFilter || "staff" });
-    setEditing(null); setShowPassword(false); setMode("add");
-  };
+  // Creating goes through the shared form, which can also register a pet and
+  // email the new sign-in details.
+  const openAdd = () => router.push("/superadmin/adduser");
 
   const openEdit = (u) => {
     setForm({ fullName: u.fullName || "", email: u.email || "", phone: u.phone || "", password: "", role: u.role });
@@ -106,8 +103,7 @@ export default function SuperAdminUsers() {
   const save = async () => {
     if (!form.fullName.trim()) return Alert.alert("Error", "Full name is required.");
     if (!form.email.trim()) return Alert.alert("Error", "Email is required.");
-    if (!editing && form.password.length < 6) return Alert.alert("Error", "Password must be at least 6 characters.");
-    if (editing && form.password && form.password.length < 6) return Alert.alert("Error", "Password must be at least 6 characters.");
+    if (form.password && form.password.length < 6) return Alert.alert("Error", "Password must be at least 6 characters.");
 
     setSaving(true);
     try {
@@ -118,16 +114,11 @@ export default function SuperAdminUsers() {
         role: form.role,
         ...(form.password ? { password: form.password } : {}),
       };
-      const res = await fetch(
-        editing
-          ? `${BASE_URL}/api/v1/superadmin/users/${editing._id}`
-          : `${BASE_URL}/api/v1/superadmin/users`,
-        {
-          method: editing ? "PUT" : "POST",
-          headers: { "Content-Type": "application/json", Authorization: token },
-          body: JSON.stringify(body),
-        }
-      );
+      const res = await fetch(`${BASE_URL}/api/v1/superadmin/users/${editing._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: token },
+        body: JSON.stringify(body),
+      });
       const json = await res.json();
       if (json.success) { setMode(null); load(); Alert.alert("Done ✅", json.message); }
       else Alert.alert("Error", json.message);
@@ -293,12 +284,12 @@ export default function SuperAdminUsers() {
       )}
 
       {/* Add / Edit sheet */}
-      <Modal visible={mode === "add" || mode === "edit"} transparent animationType="slide" onRequestClose={() => setMode(null)}>
+      <Modal visible={mode === "edit"} transparent animationType="slide" onRequestClose={() => setMode(null)}>
         <KeyboardAvoidingView style={s.overlay} behavior={Platform.OS === "ios" ? "padding" : "height"}>
           <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setMode(null)} />
           <View style={s.sheet}>
             <View style={s.sheetHead}>
-              <Text style={s.sheetTitle}>{editing ? "Edit user" : "New user"}</Text>
+              <Text style={s.sheetTitle}>Edit user</Text>
               <TouchableOpacity onPress={() => setMode(null)}>
                 <Ionicons name="close" size={22} color="#1A1206" />
               </TouchableOpacity>
@@ -344,11 +335,11 @@ export default function SuperAdminUsers() {
                   onChangeText={(v) => setForm((p) => ({ ...p, phone: v.replace(/\D/g, "") }))} />
               </View>
 
-              <Text style={s.label}>{editing ? "Reset password" : "Password *"}</Text>
+              <Text style={s.label}>Reset password</Text>
               <View style={s.inputBox}>
                 <Ionicons name="lock-closed-outline" size={17} color="#8A7A4A" />
                 <TextInput style={s.input} value={form.password}
-                  placeholder={editing ? "Khaali chhodo to purana hi rahega" : "Kam se kam 6 characters"}
+                  placeholder="Khaali chhodo to purana hi rahega"
                   placeholderTextColor="#B9AC85" secureTextEntry={!showPassword}
                   onChangeText={(v) => setForm((p) => ({ ...p, password: v }))} />
                 <TouchableOpacity onPress={() => setShowPassword((p) => !p)}>
@@ -360,7 +351,7 @@ export default function SuperAdminUsers() {
                 {saving ? <ActivityIndicator color="#1A1206" /> : (
                   <>
                     <Ionicons name="checkmark" size={18} color="#1A1206" />
-                    <Text style={s.saveBtnTxt}>{editing ? "Save changes" : "Create user"}</Text>
+                    <Text style={s.saveBtnTxt}>Save changes</Text>
                   </>
                 )}
               </TouchableOpacity>

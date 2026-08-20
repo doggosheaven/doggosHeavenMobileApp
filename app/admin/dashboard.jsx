@@ -20,6 +20,7 @@ const QUICK_ACTIONS = [
   { label: "Pet Master",    icon: "paw-outline",           route: "/admin/petmaster" },
   { label: "Inventory",     icon: "cube-outline",          route: "/admin/inventory" },
   { label: "Staff",         icon: "people-outline",        route: "/admin/staff" },
+  { label: "Add Person",    icon: "person-add-outline",    route: "/admin/adduser" },
   { label: "Services",      icon: "construct-outline",     route: "/admin/services" },
   { label: "Reminders",     icon: "notifications-outline", route: "/admin/reminders" },
   { label: "Revenue",       icon: "bar-chart-outline",     route: "/admin/bookingrevenueadmin" },

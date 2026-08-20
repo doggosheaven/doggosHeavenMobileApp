@@ -4,7 +4,7 @@ import { useRouter } from "expo-router";
 import * as Notifications from "expo-notifications";
 import { BASE_URL } from "../constants/api";
 import { saveAuth } from "../utils/authStorage";
-import { getGoogleIdToken, statusCodes, isErrorWithCode } from "../utils/googleSignIn";
+import { getGoogleIdToken, statusCodes, isErrorWithCode, isGoogleSignInAvailable } from "../utils/googleSignIn";
 import GoogleGIcon from "./GoogleGIcon";
 
 // One button that both signs up and logs in a customer via Google.
@@ -12,17 +12,21 @@ export default function GoogleAuthButton({ label = "Continue with Google" }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
-  const registerPushToken = async (userId) => {
+  // Expo Go has no native Google module — offer nothing rather than a button
+  // that can only fail.
+  if (!isGoogleSignInAvailable()) return null;
+
+  const registerPushToken = async (authToken) => {
     try {
       const { status } = await Notifications.requestPermissionsAsync();
-      if (status !== "granted" || !userId) return;
+      if (status !== "granted" || !authToken) return;
       const tokenData = await Notifications.getExpoPushTokenAsync();
       const pushToken = tokenData.data;
       if (!pushToken) return;
       fetch(`${BASE_URL}/api/v1/customerappointment/savepushtoken`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, expoPushToken: pushToken }),
+        headers: { "Content-Type": "application/json", Authorization: authToken },
+        body: JSON.stringify({ expoPushToken: pushToken }),
       }).catch(() => {});
     } catch (_) {}
   };
@@ -52,7 +56,7 @@ export default function GoogleAuthButton({ label = "Continue with Google" }) {
 
       if (data.success) {
         await saveAuth(data.token, data.user);
-        await registerPushToken(data.user?.id);
+        await registerPushToken(data.token);
         router.replace("/(tabs)/home");
       } else {
         Alert.alert("Google Sign-In Failed", data.message || "Please try again.");
