@@ -69,7 +69,7 @@ export default function StaffLayout() {
   useEffect(() => { registerStaffPushToken(); }, []);
 
   return (
-    <RoleGate allow={["staff", "admin"]}>
+    <RoleGate allow={["staff", "admin", "superadmin"]}>
       <StaffProvider>
         <View style={{ flex: 1 }}>
           <Stack screenOptions={{ headerShown: false, gestureEnabled: true, gestureDirection: "horizontal" }} />

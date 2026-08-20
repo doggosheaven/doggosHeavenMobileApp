@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import { getAuth } from "../utils/authStorage";
 
 const homeFor = (role) => {
+  if (role === "superadmin") return "/superadmin/dashboard";
   if (role === "admin") return "/admin/dashboard";
   if (role === "staff") return "/staff/dashboard";
   return "/(tabs)/home";

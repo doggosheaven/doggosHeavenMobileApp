@@ -22,9 +22,10 @@ export default function WelcomeScreen() {
   useEffect(() => {
     getAuth().then(({ token, user }) => {
       if (token) {
-        if (user?.role === "admin")      router.replace("/admin/dashboard");
-        else if (user?.role === "staff") router.replace("/staff/dashboard");
-        else                             router.replace("/(tabs)/home");
+        if (user?.role === "superadmin") router.replace("/superadmin/dashboard");
+        else if (user?.role === "admin")  router.replace("/admin/dashboard");
+        else if (user?.role === "staff")  router.replace("/staff/dashboard");
+        else                              router.replace("/(tabs)/home");
       } else {
         setChecked(true);
         Animated.stagger(120, [

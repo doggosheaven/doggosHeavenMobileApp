@@ -370,13 +370,15 @@ export default function LoginScreen() {
           body: JSON.stringify({ email: normalizedEmail, password, role: "staff" }),
         });
         data = await r1.json();
-        if (!data.success) {
-          const r2 = await fetch(`${BASE_URL}/api/v1/auth/login`, {
+        // One "Staff" button covers every internal role — try each in turn.
+        for (const fallback of ["admin", "superadmin"]) {
+          if (data.success) break;
+          const r = await fetch(`${BASE_URL}/api/v1/auth/login`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email: normalizedEmail, password, role: "admin" }),
+            body: JSON.stringify({ email: normalizedEmail, password, role: fallback }),
           });
-          data = await r2.json();
+          data = await r.json();
         }
       } else {
         const res = await fetch(`${BASE_URL}/api/v1/auth/login`, {
@@ -405,7 +407,8 @@ export default function LoginScreen() {
           }
         } catch {}
         const actualRole = data.user?.role;
-        if (actualRole === "admin")      router.replace("/admin/dashboard");
+        if (actualRole === "superadmin") router.replace("/superadmin/dashboard");
+        else if (actualRole === "admin") router.replace("/admin/dashboard");
         else if (actualRole === "staff") router.replace("/staff/dashboard");
         else                             router.replace("/(tabs)/home");
       } else {

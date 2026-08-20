@@ -70,7 +70,7 @@ export default function AdminLayout() {
   useEffect(() => { registerAdminPushToken(); }, []);
 
   return (
-    <RoleGate allow={["admin"]}>
+    <RoleGate allow={["admin", "superadmin"]}>
       <View style={{ flex: 1 }}>
         <Stack screenOptions={{ headerShown: false, gestureEnabled: true, gestureDirection: "horizontal" }}>
           <Stack.Screen name="prescription" />
