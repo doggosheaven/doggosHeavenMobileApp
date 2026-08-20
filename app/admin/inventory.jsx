@@ -9,6 +9,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
+import { registerCacheReset } from "../../utils/sessionCache";
 
 const TABS = ["All Items", "Alert List"];
 const ITEM_TYPES = ["disposable", "injection", "medicine", "vaccine"];
@@ -24,6 +25,8 @@ const emptyForm = () => ({
 let _cachedInventory = null;
 let _cachedAlertList = null;
 let _cachedInvToken = "";
+
+registerCacheReset(() => { _cachedInventory = null; _cachedAlertList = null; _cachedInvToken = ""; });
 
 export default function StaffInventory() {
   const router = useRouter();

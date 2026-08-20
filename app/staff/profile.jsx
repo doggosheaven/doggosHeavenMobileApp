@@ -9,9 +9,11 @@ import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { getAuth, clearAuth, saveAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
+import { useStaff } from "../../context/StaffContext";
 
 export default function StaffProfile() {
   const router = useRouter();
+  const { resetStaffCache } = useStaff() || {};
   const [user, setUser] = useState(null);
   const [token, setToken] = useState("");
   const [editModal, setEditModal] = useState(false);
@@ -144,7 +146,7 @@ export default function StaffProfile() {
   const handleLogout = () => {
     Alert.alert("Logout", "Are you sure you want to logout?", [
       { text: "Cancel", style: "cancel" },
-      { text: "Logout", style: "destructive", onPress: async () => { await clearAuth(); router.replace("/auth/login"); } },
+      { text: "Logout", style: "destructive", onPress: async () => { resetStaffCache?.(); await clearAuth(); router.replace("/auth/login"); } },
     ]);
   };
 

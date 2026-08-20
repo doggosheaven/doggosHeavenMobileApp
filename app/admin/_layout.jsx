@@ -6,6 +6,7 @@ import { useEffect } from "react";
 import * as Notifications from "expo-notifications";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
+import RoleGate from "../../components/RoleGate";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({ shouldShowAlert: true, shouldPlaySound: true, shouldSetBadge: true }),
@@ -69,14 +70,16 @@ export default function AdminLayout() {
   useEffect(() => { registerAdminPushToken(); }, []);
 
   return (
-    <View style={{ flex: 1 }}>
-      <Stack screenOptions={{ headerShown: false, gestureEnabled: true, gestureDirection: "horizontal" }}>
-        <Stack.Screen name="prescription" />
-        <Stack.Screen name="deboard" />
-        <Stack.Screen name="blacklisted" />
-      </Stack>
-      <AdminTabBar />
-    </View>
+    <RoleGate allow={["admin"]}>
+      <View style={{ flex: 1 }}>
+        <Stack screenOptions={{ headerShown: false, gestureEnabled: true, gestureDirection: "horizontal" }}>
+          <Stack.Screen name="prescription" />
+          <Stack.Screen name="deboard" />
+          <Stack.Screen name="blacklisted" />
+        </Stack>
+        <AdminTabBar />
+      </View>
+    </RoleGate>
   );
 }
 

@@ -10,6 +10,7 @@ import { WebView } from "react-native-webview";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
+import { registerCacheReset } from "../../utils/sessionCache";
 import { buildInvoiceHTML, downloadInvoicePDF } from "../../utils/invoiceGenerator";
 
 const FILTERS = ["All", "Pending", "Confirmed", "Completed", "Cancelled"];
@@ -86,6 +87,8 @@ const cal = StyleSheet.create({
 
 let _cachedAppts = null;
 let _cachedApptToken = "";
+
+registerCacheReset(() => { _cachedAppts = null; _cachedApptToken = ""; });
 
 export default function AdminAppointments() {
   const { filter: paramFilter } = useLocalSearchParams();

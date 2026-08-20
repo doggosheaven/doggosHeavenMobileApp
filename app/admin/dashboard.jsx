@@ -8,6 +8,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
+import { registerCacheReset } from "../../utils/sessionCache";
 
 const STATUS_BAR_HEIGHT = Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 44;
 
@@ -38,6 +39,13 @@ let _cachedVisits = [];
 let _cachedUser = null;
 let _cachedToken = "";
 let _cachedUnread = 0;
+
+registerCacheReset(() => {
+  _loaded = false;
+  _cachedStats = { total: 0, pending: 0, confirmed: 0, completed: 0, totalVisits: 0 };
+  _cachedAppts = []; _cachedVisits = []; _cachedUser = null;
+  _cachedToken = ""; _cachedUnread = 0;
+});
 
 export default function AdminDashboard() {
   const router = useRouter();

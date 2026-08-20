@@ -8,12 +8,15 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
+import { registerCacheReset } from "../../utils/sessionCache";
 
 const fmtDate = (d) =>
   d ? new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 
 let _cachedPets = null;
 let _cachedToken = "";
+
+registerCacheReset(() => { _cachedPets = null; _cachedToken = ""; });
 
 export default function BlacklistedPets() {
   const router = useRouter();
