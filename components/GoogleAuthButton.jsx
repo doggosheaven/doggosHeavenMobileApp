@@ -50,7 +50,7 @@ export default function GoogleAuthButton({ label = "Continue with Google" }) {
       try {
         data = JSON.parse(raw);
       } catch {
-        Alert.alert("Server Error", "Sign-in server abhi available nahi hai. Thodi der baad try karein.");
+        Alert.alert("Server Error", "The sign-in server is unavailable right now. Please try again shortly.");
         return;
       }
 

@@ -53,8 +53,8 @@ export default function SuperAdminProfile() {
   };
 
   const changePassword = async () => {
-    if (!pw.currentPassword || !pw.newPassword) return Alert.alert("Error", "Dono passwords chahiye.");
-    if (pw.newPassword.length < 6) return Alert.alert("Error", "Naya password kam se kam 6 characters ka ho.");
+    if (!pw.currentPassword || !pw.newPassword) return Alert.alert("Error", "Both passwords are required.");
+    if (pw.newPassword.length < 6) return Alert.alert("Error", "New password must be at least 6 characters.");
     setPwSaving(true);
     try {
       const res = await fetch(`${BASE_URL}/api/v1/auth/changepassword`, {
@@ -73,7 +73,7 @@ export default function SuperAdminProfile() {
   };
 
   const logout = () => {
-    Alert.alert("Logout", "Sign out karna hai?", [
+    Alert.alert("Logout", "Are you sure you want to sign out?", [
       { text: "Cancel", style: "cancel" },
       { text: "Logout", style: "destructive", onPress: async () => { await clearAuth(); router.replace("/auth/login"); } },
     ]);
@@ -89,7 +89,7 @@ export default function SuperAdminProfile() {
           <Text style={s.name}>{user?.fullName || "Super Admin"}</Text>
           <Text style={s.email}>{user?.email}</Text>
           <View style={s.badge}>
-            <Ionicons name="shield-checkmark" size={11} color="#1A1206" />
+            <Ionicons name="shield-checkmark" size={11} color="#0B3D2E" />
             <Text style={s.badgeTxt}>SUPER ADMIN</Text>
           </View>
         </View>
@@ -117,7 +117,7 @@ export default function SuperAdminProfile() {
                   onChangeText={(v) => setForm((p) => ({ ...p, phone: v.replace(/\D/g, "") }))} />
               </View>
               <TouchableOpacity style={s.primaryBtn} onPress={saveProfile} disabled={saving} activeOpacity={0.85}>
-                {saving ? <ActivityIndicator color="#1A1206" /> : <Text style={s.primaryTxt}>Save</Text>}
+                {saving ? <ActivityIndicator color="#0B3D2E" /> : <Text style={s.primaryTxt}>Save</Text>}
               </TouchableOpacity>
             </>
           ) : (
@@ -149,7 +149,7 @@ export default function SuperAdminProfile() {
                   onChangeText={(v) => setPw((p) => ({ ...p, newPassword: v }))} />
               </View>
               <TouchableOpacity style={s.primaryBtn} onPress={changePassword} disabled={pwSaving} activeOpacity={0.85}>
-                {pwSaving ? <ActivityIndicator color="#1A1206" /> : <Text style={s.primaryTxt}>Update password</Text>}
+                {pwSaving ? <ActivityIndicator color="#0B3D2E" /> : <Text style={s.primaryTxt}>Update password</Text>}
               </TouchableOpacity>
             </>
           )}
@@ -175,49 +175,49 @@ function Row({ label, value, last }) {
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F7F4EC" },
+  container: { flex: 1, backgroundColor: "#F0F7F0" },
   header: {
-    backgroundColor: "#1A1206", paddingHorizontal: 20, paddingBottom: 20,
+    backgroundColor: "#0B3D2E", paddingHorizontal: 20, paddingBottom: 20,
     flexDirection: "row", alignItems: "center", gap: 14,
   },
   avatar: {
-    width: 58, height: 58, borderRadius: 29, backgroundColor: "#F5C451",
+    width: 58, height: 58, borderRadius: 29, backgroundColor: "#A8D96C",
     justifyContent: "center", alignItems: "center",
   },
-  avatarTxt: { fontSize: 20, fontFamily: "Poppins_700Bold", color: "#1A1206" },
+  avatarTxt: { fontSize: 20, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
   name: { fontSize: 18, fontFamily: "Poppins_700Bold", color: "#fff" },
-  email: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#B9AC85", marginTop: 1 },
+  email: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#8A9A8A", marginTop: 1 },
   badge: {
     flexDirection: "row", alignItems: "center", gap: 4, alignSelf: "flex-start",
-    backgroundColor: "#F5C451", borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2, marginTop: 6,
+    backgroundColor: "#A8D96C", borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2, marginTop: 6,
   },
-  badgeTxt: { fontSize: 9, fontFamily: "Poppins_700Bold", color: "#1A1206", letterSpacing: 0.5 },
+  badgeTxt: { fontSize: 9, fontFamily: "Poppins_700Bold", color: "#0B3D2E", letterSpacing: 0.5 },
 
   scroll: { padding: 16 },
   card: {
     backgroundColor: "#fff", borderRadius: 16, padding: 16, marginBottom: 12,
-    borderWidth: 1, borderColor: "#EDE4CE",
+    borderWidth: 1, borderColor: "#D4EDD4",
   },
   cardHead: { flexDirection: "row", alignItems: "center", marginBottom: 8 },
-  cardTitle: { flex: 1, fontSize: 14, fontFamily: "Poppins_700Bold", color: "#1A1206" },
-  link: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#B8860B" },
+  cardTitle: { flex: 1, fontSize: 14, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+  link: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#3E7B27" },
 
-  row: { flexDirection: "row", paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#F2ECDD" },
-  rowLabel: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", color: "#8A7A4A" },
-  rowValue: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#1A1206" },
+  row: { flexDirection: "row", paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#E8F5E8" },
+  rowLabel: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", color: "#8A9A8A" },
+  rowValue: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
 
-  label: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#1A1206", marginTop: 10, marginBottom: 6 },
+  label: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginTop: 10, marginBottom: 6 },
   inputBox: {
-    backgroundColor: "#F7F4EC", borderRadius: 12, paddingHorizontal: 12, height: 46,
-    justifyContent: "center", borderWidth: 1, borderColor: "#EDE4CE",
+    backgroundColor: "#F0F7F0", borderRadius: 12, paddingHorizontal: 12, height: 46,
+    justifyContent: "center", borderWidth: 1, borderColor: "#D4EDD4",
   },
-  input: { fontSize: 14, fontFamily: "Inter_400Regular", color: "#1A1206" },
+  input: { fontSize: 14, fontFamily: "Inter_400Regular", color: "#0B3D2E" },
 
   primaryBtn: {
-    backgroundColor: "#F5C451", borderRadius: 12, paddingVertical: 12,
+    backgroundColor: "#A8D96C", borderRadius: 12, paddingVertical: 12,
     alignItems: "center", marginTop: 14,
   },
-  primaryTxt: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#1A1206" },
+  primaryTxt: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
 
   logoutBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,

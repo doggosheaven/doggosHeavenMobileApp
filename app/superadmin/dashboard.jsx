@@ -13,8 +13,8 @@ import { registerCacheReset } from "../../utils/sessionCache";
 const STATUS_BAR_HEIGHT = Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 44;
 
 const ROLE_CARDS = [
-  { key: "superadmin", label: "Super Admins", icon: "shield-checkmark", tint: "#F5C451" },
-  { key: "admin",      label: "Admins",       icon: "shield-half",      tint: "#A8D96C" },
+  { key: "superadmin", label: "Super Admins", icon: "shield-checkmark", tint: "#0B3D2E" },
+  { key: "admin",      label: "Admins",       icon: "shield-half",      tint: "#3E7B27" },
   { key: "staff",      label: "Staff",        icon: "briefcase",        tint: "#7EC8E3" },
   { key: "customer",   label: "Customers",    icon: "people",           tint: "#E8A0BF" },
 ];
@@ -62,7 +62,7 @@ export default function SuperAdminDashboard() {
   if (loading) {
     return (
       <View style={s.loadingBox}>
-        <ActivityIndicator size="large" color="#F5C451" />
+        <ActivityIndicator size="large" color="#A8D96C" />
       </View>
     );
   }
@@ -75,7 +75,7 @@ export default function SuperAdminDashboard() {
           <Text style={s.headerTitle}>Everything, at a glance</Text>
         </View>
         <View style={s.crown}>
-          <Ionicons name="shield-checkmark" size={20} color="#1A1206" />
+          <Ionicons name="shield-checkmark" size={20} color="#0B3D2E" />
         </View>
       </View>
 
@@ -83,7 +83,7 @@ export default function SuperAdminDashboard() {
         contentContainerStyle={s.scroll}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor="#F5C451" />
+          <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor="#A8D96C" />
         }
       >
         {/* People */}
@@ -109,9 +109,9 @@ export default function SuperAdminDashboard() {
             activeOpacity={0.85}
             onPress={() => router.push("/superadmin/users?includeInactive=1")}
           >
-            <Ionicons name="pause-circle-outline" size={16} color="#B8860B" />
+            <Ionicons name="pause-circle-outline" size={16} color="#3E7B27" />
             <Text style={s.inactiveTxt}>{data.inactiveUsers} deactivated account(s)</Text>
-            <Ionicons name="chevron-forward" size={14} color="#B8860B" />
+            <Ionicons name="chevron-forward" size={14} color="#3E7B27" />
           </TouchableOpacity>
         )}
 
@@ -141,7 +141,7 @@ export default function SuperAdminDashboard() {
         </View>
 
         <TouchableOpacity style={s.consoleBtn} activeOpacity={0.85} onPress={() => router.push("/superadmin/console")}>
-          <Ionicons name="grid-outline" size={18} color="#1A1206" />
+          <Ionicons name="grid-outline" size={18} color="#0B3D2E" />
           <Text style={s.consoleBtnTxt}>Open full console</Text>
         </TouchableOpacity>
 
@@ -152,62 +152,62 @@ export default function SuperAdminDashboard() {
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F7F4EC" },
-  loadingBox: { flex: 1, backgroundColor: "#F7F4EC", justifyContent: "center", alignItems: "center" },
+  container: { flex: 1, backgroundColor: "#F0F7F0" },
+  loadingBox: { flex: 1, backgroundColor: "#F0F7F0", justifyContent: "center", alignItems: "center" },
 
   header: {
-    backgroundColor: "#1A1206", paddingHorizontal: 20, paddingBottom: 18,
+    backgroundColor: "#0B3D2E", paddingHorizontal: 20, paddingBottom: 18,
     flexDirection: "row", alignItems: "center", gap: 12,
   },
-  headerKicker: { fontSize: 11, fontFamily: "Poppins_700Bold", color: "#F5C451", letterSpacing: 1.5 },
+  headerKicker: { fontSize: 11, fontFamily: "Poppins_700Bold", color: "#A8D96C", letterSpacing: 1.5 },
   headerTitle: { fontSize: 20, fontFamily: "Poppins_700Bold", color: "#fff", marginTop: 2 },
   crown: {
-    width: 40, height: 40, borderRadius: 12, backgroundColor: "#F5C451",
+    width: 40, height: 40, borderRadius: 12, backgroundColor: "#A8D96C",
     justifyContent: "center", alignItems: "center",
   },
 
   scroll: { padding: 16 },
   sectionTitle: {
-    fontSize: 12, fontFamily: "Poppins_700Bold", color: "#8A7A4A",
+    fontSize: 12, fontFamily: "Poppins_700Bold", color: "#8A9A8A",
     letterSpacing: 1, marginBottom: 10, marginTop: 6,
   },
 
   roleGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 12 },
   roleCard: {
     width: "47.5%", backgroundColor: "#fff", borderRadius: 16, padding: 14, gap: 4,
-    borderWidth: 1, borderColor: "#EDE4CE", elevation: 2,
+    borderWidth: 1, borderColor: "#D4EDD4", elevation: 2,
   },
-  roleValue: { fontSize: 24, fontFamily: "Poppins_700Bold", color: "#1A1206" },
-  roleLabel: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#8A7A4A" },
+  roleValue: { fontSize: 24, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+  roleLabel: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#8A9A8A" },
 
   inactiveBanner: {
     flexDirection: "row", alignItems: "center", gap: 8,
     backgroundColor: "#FFF9E6", borderRadius: 12, padding: 12, marginBottom: 6,
     borderWidth: 1, borderColor: "#FFE082",
   },
-  inactiveTxt: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", color: "#B8860B" },
+  inactiveTxt: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", color: "#3E7B27" },
 
   moneyRow: { flexDirection: "row", gap: 10, marginBottom: 12 },
   moneyCard: {
-    flex: 1, backgroundColor: "#1A1206", borderRadius: 16, padding: 14, gap: 4,
+    flex: 1, backgroundColor: "#0B3D2E", borderRadius: 16, padding: 14, gap: 4,
   },
-  moneyValue: { fontSize: 18, fontFamily: "Poppins_700Bold", color: "#F5C451" },
-  moneyLabel: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#B9AC85" },
+  moneyValue: { fontSize: 18, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
+  moneyLabel: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#8A9A8A" },
 
   list: {
     backgroundColor: "#fff", borderRadius: 16, paddingHorizontal: 14,
-    borderWidth: 1, borderColor: "#EDE4CE", marginBottom: 16,
+    borderWidth: 1, borderColor: "#D4EDD4", marginBottom: 16,
   },
   listRow: {
     flexDirection: "row", alignItems: "center", paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: "#F2ECDD",
+    borderBottomWidth: 1, borderBottomColor: "#E8F5E8",
   },
-  listLabel: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", color: "#3A3327" },
-  listValue: { fontSize: 15, fontFamily: "Poppins_700Bold", color: "#1A1206" },
+  listLabel: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", color: "#1A1A1A" },
+  listValue: { fontSize: 15, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
 
   consoleBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
-    backgroundColor: "#F5C451", borderRadius: 14, paddingVertical: 14, elevation: 2,
+    backgroundColor: "#A8D96C", borderRadius: 14, paddingVertical: 14, elevation: 2,
   },
-  consoleBtnTxt: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#1A1206" },
+  consoleBtnTxt: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
 });

@@ -346,7 +346,7 @@ export default function TotalVisitsScreen({ basePath = "/staff" }) {
         </TouchableOpacity>
       </View>
 
-      {/* Filters — sirf date picker */}
+      {/* Filters — date picker only */}
       <View style={s.filterBox}>
         <View style={s.dateRow}>
           <TouchableOpacity style={s.navBtn} onPress={() => {

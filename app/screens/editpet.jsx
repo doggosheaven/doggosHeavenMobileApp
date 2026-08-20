@@ -236,7 +236,7 @@ export default function EditPetScreen() {
                 <Ionicons name="camera" size={28} color="#A8D96C" />
               </View>
               <Text style={styles.imagePickerText}>Add Pet Photo</Text>
-              <Text style={styles.imagePickerSub}>Camera ya Gallery se add karo</Text>
+              <Text style={styles.imagePickerSub}>Add from camera or gallery</Text>
             </View>
           )}
         </TouchableOpacity>

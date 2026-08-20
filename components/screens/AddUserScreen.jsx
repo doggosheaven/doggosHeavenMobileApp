@@ -91,7 +91,7 @@ export default function AddUserScreen({ callerRole = "admin", accent = "#0B3D2E"
       if (json.success) {
         const lines = [json.message];
         if (json.generatedPassword) lines.push(`\nTemporary password: ${json.generatedPassword}`);
-        if (form.sendEmail && !json.emailed) lines.push("\nEmail nahi jaa saka — password khud share kar dein.");
+        if (form.sendEmail && !json.emailed) lines.push("\nThe email could not be sent — share the password with them directly.");
         Alert.alert("Account ready ✅", lines.join("\n"), [
           { text: "Add another", onPress: () => setForm(emptyForm(form.role)) },
           { text: "Done", onPress: () => router.back() },
@@ -129,7 +129,7 @@ export default function AddUserScreen({ callerRole = "admin", accent = "#0B3D2E"
         </View>
 
         <Text style={s.section}>DETAILS</Text>
-        <Field icon="person-outline" label="Full name *" value={form.fullName} onChange={(v) => set("fullName", v)} placeholder="Pura naam" />
+        <Field icon="person-outline" label="Full name *" value={form.fullName} onChange={(v) => set("fullName", v)} placeholder="Full name" />
         <Field icon="mail-outline" label="Email *" value={form.email} onChange={(v) => set("email", v)} placeholder="name@example.com" keyboardType="email-address" autoCapitalize="none" />
         <Field icon="call-outline" label="Phone" value={form.phone} onChange={(v) => set("phone", v.replace(/\D/g, ""))} placeholder="10 digits" keyboardType="number-pad" maxLength={10} />
         {isCustomer && (
@@ -141,7 +141,7 @@ export default function AddUserScreen({ callerRole = "admin", accent = "#0B3D2E"
           <Ionicons name="lock-closed-outline" size={17} color="#3E7B27" />
           <TextInput
             style={s.input}
-            placeholder="Khaali chhodo — hum bana ke email kar denge"
+            placeholder="Leave blank to generate and email one"
             placeholderTextColor="#aaa"
             secureTextEntry={!showPassword}
             value={form.password}
@@ -155,7 +155,7 @@ export default function AddUserScreen({ callerRole = "admin", accent = "#0B3D2E"
         <View style={s.switchRow}>
           <View style={{ flex: 1 }}>
             <Text style={s.switchLabel}>Email login details</Text>
-            <Text style={s.switchHint}>Naye user ko email aur password bhej diya jayega</Text>
+            <Text style={s.switchHint}>The new user receives their email and password by mail</Text>
           </View>
           <Switch
             value={form.sendEmail}
@@ -171,8 +171,8 @@ export default function AddUserScreen({ callerRole = "admin", accent = "#0B3D2E"
             <Text style={s.section}>FIRST PET</Text>
             <View style={s.switchRow}>
               <View style={{ flex: 1 }}>
-                <Text style={s.switchLabel}>Abhi pet bhi add karein</Text>
-                <Text style={s.switchHint}>Taaki user ko baad me kuchh na karna pade</Text>
+                <Text style={s.switchLabel}>Register their first pet now</Text>
+                <Text style={s.switchHint}>So they can start booking straight away</Text>
               </View>
               <Switch
                 value={form.addPet}

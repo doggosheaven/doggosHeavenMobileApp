@@ -33,7 +33,7 @@ function SuperAdminTabBar() {
             <Ionicons
               name={active ? tab.icon.replace("-outline", "") : tab.icon}
               size={22}
-              color={active ? "#F5C451" : "#8A7A4A"}
+              color={active ? "#A8D96C" : "#6B9E6B"}
             />
             <Text style={[s.tabLabel, active && s.tabLabelActive]}>{tab.label}</Text>
           </TouchableOpacity>
@@ -55,10 +55,8 @@ export default function SuperAdminLayout() {
 }
 
 const s = StyleSheet.create({
-  // Amber rather than the green used elsewhere, so it is obvious at a glance
-  // that you are in the highest-privilege area.
-  tabBar: { flexDirection: "row", backgroundColor: "#1A1206", borderTopWidth: 0 },
+  tabBar: { flexDirection: "row", backgroundColor: "#0B3D2E", borderTopWidth: 0 },
   tabItem: { flex: 1, alignItems: "center", justifyContent: "center", gap: 3 },
-  tabLabel: { fontSize: 11, fontFamily: "Poppins_700Bold", color: "#8A7A4A" },
-  tabLabelActive: { color: "#F5C451" },
+  tabLabel: { fontSize: 11, fontFamily: "Poppins_700Bold", color: "#6B9E6B" },
+  tabLabelActive: { color: "#A8D96C" },
 });

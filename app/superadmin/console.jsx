@@ -82,7 +82,7 @@ export default function SuperAdminConsole() {
                   onPress={() => router.push(item.route)}
                 >
                   <View style={s.tileIcon}>
-                    <Ionicons name={item.icon} size={19} color="#F5C451" />
+                    <Ionicons name={item.icon} size={19} color="#A8D96C" />
                   </View>
                   <Text style={s.tileTxt} numberOfLines={2}>{item.label}</Text>
                 </TouchableOpacity>
@@ -97,25 +97,25 @@ export default function SuperAdminConsole() {
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F7F4EC" },
-  header: { backgroundColor: "#1A1206", paddingHorizontal: 20, paddingBottom: 18 },
-  headerKicker: { fontSize: 11, fontFamily: "Poppins_700Bold", color: "#F5C451", letterSpacing: 1.5 },
+  container: { flex: 1, backgroundColor: "#F0F7F0" },
+  header: { backgroundColor: "#0B3D2E", paddingHorizontal: 20, paddingBottom: 18 },
+  headerKicker: { fontSize: 11, fontFamily: "Poppins_700Bold", color: "#A8D96C", letterSpacing: 1.5 },
   headerTitle: { fontSize: 20, fontFamily: "Poppins_700Bold", color: "#fff", marginTop: 2 },
 
   scroll: { padding: 16 },
   sectionTitle: {
-    fontSize: 11, fontFamily: "Poppins_700Bold", color: "#8A7A4A",
+    fontSize: 11, fontFamily: "Poppins_700Bold", color: "#8A9A8A",
     letterSpacing: 1.2, marginBottom: 10, marginTop: 8,
   },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 8 },
   tile: {
     width: "31%", backgroundColor: "#fff", borderRadius: 14, paddingVertical: 14,
     paddingHorizontal: 8, alignItems: "center", gap: 8,
-    borderWidth: 1, borderColor: "#EDE4CE", elevation: 1,
+    borderWidth: 1, borderColor: "#D4EDD4", elevation: 1,
   },
   tileIcon: {
-    width: 38, height: 38, borderRadius: 12, backgroundColor: "#1A1206",
+    width: 38, height: 38, borderRadius: 12, backgroundColor: "#0B3D2E",
     justifyContent: "center", alignItems: "center",
   },
-  tileTxt: { fontSize: 11, fontFamily: "Poppins_700Bold", color: "#1A1206", textAlign: "center" },
+  tileTxt: { fontSize: 11, fontFamily: "Poppins_700Bold", color: "#0B3D2E", textAlign: "center" },
 });
