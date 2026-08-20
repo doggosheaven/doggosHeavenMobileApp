@@ -40,7 +40,13 @@ export default function StaffDashboard() {
   const [totalVisitsCount, setTotalVisitsCount] = useState(_cachedVisitsCount);
   const [calModal, setCalModal] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const dateRef = useRef(new Date());
   const [calMonth, setCalMonth] = useState(new Date());
+
+  const toISODate = (d) => {
+    const x = new Date(d);
+    return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
+  };
 
   const load = useCallback(async (force = false) => {
     if (isFetching.current) return;
@@ -50,20 +56,21 @@ export default function StaffDashboard() {
       const { token: t, user: u } = await getAuth();
       setToken(t || "");
       setUser(u);
-      const [statsRes, alertRes, allVisitsRes] = await Promise.all([
-        fetch(`${BASE_URL}/api/v1/auth/mystats`, { headers: { Authorization: t || "" } }),
+      // mystats now reports the branch visit count and only the selected day's
+      // appointments, so the screen no longer pulls every visit and every booking.
+      const dateParam = dateRef.current ? `?date=${toISODate(dateRef.current)}` : "";
+      const [statsRes, alertRes] = await Promise.all([
+        fetch(`${BASE_URL}/api/v1/auth/mystats${dateParam}`, { headers: { Authorization: t || "" } }),
         fetch(`${BASE_URL}/api/v1/alerts/getall`, { headers: { Authorization: t || "" } }),
-        fetch(`${BASE_URL}/api/v1/visit/getvisitlist`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: t || "" },
-        }),
       ]);
       const json = await statsRes.json();
       const alertJson = await alertRes.json();
-      const allVisitsJson = await allVisitsRes.json();
-      if (json.success) { setData(json); _cachedData = json; }
+      if (json.success) {
+        setData(json); _cachedData = json;
+        const c = json.branchVisitCount || 0;
+        setTotalVisitsCount(c); _cachedVisitsCount = c;
+      }
       if (alertJson.success) { const u = alertJson.unreadCount || 0; setUnreadCount(u); _cachedUnread = u; }
-      if (allVisitsJson.success) { const c = (allVisitsJson.List || []).length; setTotalVisitsCount(c); _cachedVisitsCount = c; }
       _cachedToken = t || "";
       _cachedUser = u;
       _dashboardLoaded = true;
@@ -72,6 +79,14 @@ export default function StaffDashboard() {
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  // The server now scopes the appointment list to one day, so a new day needs a fetch.
+  const firstDateRun = useRef(true);
+  useEffect(() => {
+    dateRef.current = selectedDate;
+    if (firstDateRun.current) { firstDateRun.current = false; return; }
+    load(true);
+  }, [selectedDate, load]);
 
   // Poll unread count every 30 seconds
   const tokenRef = useRef("");
@@ -118,7 +133,7 @@ export default function StaffDashboard() {
   const allAppts = data?.todayAppointments || [];
   const todayAppts = isToday
     ? [...allAppts].sort((a, b) => new Date(b.appointmentDate) - new Date(a.appointmentDate))
-    : (data?.allAppointments || []).filter(a => isSameDay(a.appointmentDate, selectedDate));
+    : [...(data?.dateAppointments || [])].sort((a, b) => new Date(b.appointmentDate) - new Date(a.appointmentDate));
 
   const recentVisits = [...(data?.recentVisits || [])]
     .filter(v => isToday ? true : isSameDay(v.createdAt, selectedDate))

@@ -69,38 +69,37 @@ export default function AdminDashboard() {
     try {
       const { user: u, token: t } = await getAuth();
       setUser(u); setToken(t || "");
+      // Counts and the three recent rows come back already computed — this screen
+      // used to download every appointment and every visit to derive them.
       const [apptRes, alertRes, visitRes] = await Promise.all([
-        fetch(`${BASE_URL}/api/v1/customerappointment/getallappoint`, { headers: { Authorization: t || "" } }),
+        fetch(`${BASE_URL}/api/v1/customerappointment/summary?limit=3`, { headers: { Authorization: t || "" } }),
         fetch(`${BASE_URL}/api/v1/alerts/getall`, { headers: { Authorization: t || "" } }),
-        fetch(`${BASE_URL}/api/v1/visit/getvisitlist`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: t || "" },
-        }),
+        fetch(`${BASE_URL}/api/v1/visit/summary?limit=3`, { headers: { Authorization: t || "" } }),
       ]);
       const apptData  = await apptRes.json();
       const alertData = await alertRes.json();
       const visitData = await visitRes.json();
 
       if (apptData.success) {
-        const appts = apptData.data || [];
         const newStats = {
           ..._cachedStats,
-          total:     appts.length,
-          pending:   appts.filter(a => a.status === "pending").length,
-          confirmed: appts.filter(a => a.status === "confirmed").length,
-          completed: appts.filter(a => a.status === "completed").length,
+          total:     apptData.total || 0,
+          pending:   apptData.pending || 0,
+          confirmed: apptData.confirmed || 0,
+          completed: apptData.completed || 0,
         };
         setStats(newStats); _cachedStats = newStats;
-        setRecentAppts(appts.slice(0, 3)); _cachedAppts = appts.slice(0, 3);
+        const recent = apptData.recent || [];
+        setRecentAppts(recent); _cachedAppts = recent;
       }
       if (alertData.success) {
         const u = alertData.unreadCount || 0;
         setUnreadCount(u); _cachedUnread = u;
       }
       if (visitData.success) {
-        const visits = visitData.List || [];
-        setRecentVisits(visits.slice(0, 3)); _cachedVisits = visits.slice(0, 3);
-        const newStats2 = { ..._cachedStats, totalVisits: visits.length };
+        const recent = visitData.recent || [];
+        setRecentVisits(recent); _cachedVisits = recent;
+        const newStats2 = { ..._cachedStats, totalVisits: visitData.total || 0 };
         setStats(newStats2); _cachedStats = newStats2;
       }
       _cachedUser = u; _cachedToken = t || "";
@@ -117,7 +116,7 @@ export default function AdminDashboard() {
       try {
         const { token: t } = await getAuth();
         tokenRef.current = t || "";
-        const res = await fetch(`${BASE_URL}/api/v1/alerts/getall`, { headers: { Authorization: tokenRef.current } });
+        const res = await fetch(`${BASE_URL}/api/v1/alerts/getall?countOnly=1`, { headers: { Authorization: tokenRef.current } });
         const json = await res.json();
         if (json.success) setUnreadCount(json.unreadCount || 0);
       } catch {}

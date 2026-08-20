@@ -39,25 +39,25 @@ export function StaffProvider({ children }) {
     } catch {}
   }, []);
 
-  // Poll for new bookings every 15 seconds
+  // Poll for new bookings every 15 seconds.
+  // Only the count is needed to decide whether to buzz, so ask for the count —
+  // this used to download every appointment in the database four times a minute.
   useEffect(() => {
     const poll = async () => {
       try {
         const { token: t, user: u } = await getAuth();
         if (!u || u.role !== "staff") return;
         tokenRef.current = t || "";
-        const res = await fetch(`${BASE_URL}/api/v1/customerappointment/getallappoint`, {
+        const res = await fetch(`${BASE_URL}/api/v1/customerappointment/summary?limit=1`, {
           headers: { Authorization: tokenRef.current },
         });
         const data = await res.json();
         if (!data.success) return;
-        const newCount = (data.data || []).length;
+        const newCount = data.total || 0;
         if (lastApptCount.current !== null && newCount > lastApptCount.current) {
           triggerBookingAlert(newCount - lastApptCount.current);
-          // Force refresh appointments
+          // Let the next visit to the bookings screen pull the full list.
           loaded.current.appointments = false;
-          setAppointments(data.data || []);
-          loaded.current.appointments = true;
         }
         lastApptCount.current = newCount;
       } catch {}
