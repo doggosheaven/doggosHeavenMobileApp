@@ -38,7 +38,17 @@ export default function GoogleAuthButton({ label = "Continue with Google" }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ idToken }),
       });
-      const data = await res.json();
+
+      // Server sometimes returns an HTML error page (e.g. 404 before deploy).
+      // Read as text first so we can show a clean message instead of a JSON parse crash.
+      const raw = await res.text();
+      let data;
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        Alert.alert("Server Error", "Sign-in server abhi available nahi hai. Thodi der baad try karein.");
+        return;
+      }
 
       if (data.success) {
         await saveAuth(data.token, data.user);

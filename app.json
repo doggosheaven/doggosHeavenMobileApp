@@ -2,7 +2,7 @@
   "expo": {
     "name": "Doggos Heaven",
     "slug": "doggosheaven",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "doggosheaven",
@@ -11,7 +11,8 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.doggosheaven.app",
-      "buildNumber": "3",
+      "buildNumber": "4",
+      "icon": "./assets/images/icon-ios.png",
       "infoPlist": {
         "NSCameraUsageDescription": "Allow Doggos Heaven to use your camera to take pet photos.",
         "NSPhotoLibraryUsageDescription": "Allow Doggos Heaven to access your photos to upload pet pictures.",
@@ -21,7 +22,7 @@
     },
     "android": {
       "package": "com.doggosheaven.app",
-      "versionCode": 13,
+      "versionCode": 15,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/doggoswhite.png",
         "backgroundColor": "#0B3D2E"
@@ -29,7 +30,12 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "permissions": [
-        "android.permission.CAMERA",
+        "android.permission.CAMERA"
+      ],
+      "blockedPermissions": [
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE"
       ]
