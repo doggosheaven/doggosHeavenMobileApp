@@ -9,6 +9,15 @@ import { useRouter } from "expo-router";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
 
+// Pad to a full six-row grid so the calendar keeps one height all year — an
+// unpadded month renders four, five or six rows and the dialog jumps about.
+const padToSixWeeks = (cells) => {
+  const out = [...cells];
+  while (out.length < 42) out.push(null);
+  return out;
+};
+
+
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const DAY_NAMES   = ["Su","Mo","Tu","We","Th","Fr","Sa"];
 const toISO = (d) => d.toISOString().split("T")[0];
@@ -27,7 +36,7 @@ function CalendarModal({ visible, selectedDate, onSelect, onClose, token }) {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDay    = new Date(year, month, 1).getDay();
   const isSameDay   = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
-  const calDays = [...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
+  const calDays = padToSixWeeks([...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)]);
 
   
   const fetchActiveDates = useCallback(async (y, m) => {

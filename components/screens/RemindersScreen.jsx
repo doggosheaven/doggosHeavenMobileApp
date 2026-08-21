@@ -8,6 +8,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
+import CalendarModal from "../CalendarModal";
 
 const toISO = (d) => d.toISOString().split("T")[0];
 const addDays = (d, n) => { const r = new Date(d); r.setDate(r.getDate() + n); return r; };
@@ -18,78 +19,6 @@ const TABS = ["Reminders", "Attendance"];
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const DAY_NAMES = ["Su","Mo","Tu","We","Th","Fr","Sa"];
 
-function CalendarModal({ visible, selectedDate, onSelect, onClose }) {
-  const [calMonth, setCalMonth] = useState(selectedDate || new Date());
-  const year = calMonth.getFullYear();
-  const month = calMonth.getMonth();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const firstDay = new Date(year, month, 1).getDay();
-  const isSameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
-  const calDays = [...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
-
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <TouchableOpacity style={cs.overlay} activeOpacity={1} onPress={onClose}>
-        <TouchableOpacity activeOpacity={1} style={cs.box}>
-          <View style={cs.header}>
-            <TouchableOpacity onPress={() => setCalMonth(new Date(year, month - 1, 1))} hitSlop={{ top:8,bottom:8,left:8,right:8 }}>
-              <Ionicons name="chevron-back" size={20} color="#0B3D2E" />
-            </TouchableOpacity>
-            <Text style={cs.monthTxt}>{MONTH_NAMES[month]} {year}</Text>
-            <TouchableOpacity onPress={() => setCalMonth(new Date(year, month + 1, 1))} hitSlop={{ top:8,bottom:8,left:8,right:8 }}>
-              <Ionicons name="chevron-forward" size={20} color="#0B3D2E" />
-            </TouchableOpacity>
-          </View>
-          <View style={cs.dayRow}>
-            {DAY_NAMES.map(d => <Text key={d} style={cs.dayName}>{d}</Text>)}
-          </View>
-          <FlatList
-            data={calDays}
-            numColumns={7}
-            keyExtractor={(_, i) => String(i)}
-            scrollEnabled={false}
-            renderItem={({ item: day }) => {
-              if (!day) return <View style={cs.dayEmpty} />;
-              const thisDate = new Date(year, month, day);
-              const isSelected = selectedDate && isSameDay(thisDate, selectedDate);
-              const isToday = isSameDay(thisDate, new Date());
-              return (
-                <TouchableOpacity
-                  style={[cs.day, isSelected && cs.daySelected, isToday && !isSelected && cs.dayToday]}
-                  onPress={() => { onSelect(thisDate); onClose(); }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[cs.dayTxt, isSelected && cs.dayTxtSelected, isToday && !isSelected && cs.dayTxtToday]}>{day}</Text>
-                </TouchableOpacity>
-              );
-            }}
-          />
-          <TouchableOpacity style={cs.todayBtn} onPress={() => { onSelect(new Date()); onClose(); }} activeOpacity={0.8}>
-            <Text style={cs.todayBtnTxt}>Go to Today</Text>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </TouchableOpacity>
-    </Modal>
-  );
-}
-
-const cs = StyleSheet.create({
-  overlay: { flex:1, backgroundColor:"rgba(0,0,0,0.45)", justifyContent:"center", alignItems:"center" },
-  box: { backgroundColor:"#fff", borderRadius:20, padding:20, width:"88%", elevation:10 },
-  header: { flexDirection:"row", justifyContent:"space-between", alignItems:"center", marginBottom:14 },
-  monthTxt: { fontSize:16, fontFamily:"Poppins_700Bold", color:"#0B3D2E" },
-  dayRow: { flexDirection:"row", marginBottom:6 },
-  dayName: { flex:1, textAlign:"center", fontSize:11, fontFamily:"Poppins_700Bold", color:"#3E7B27" },
-  day: { flex:1, aspectRatio:1, justifyContent:"center", alignItems:"center", borderRadius:8, margin:1 },
-  dayEmpty: { flex:1, aspectRatio:1, margin:1 },
-  daySelected: { backgroundColor:"#0B3D2E" },
-  dayToday: { backgroundColor:"#E8F5E8", borderWidth:1.5, borderColor:"#3E7B27" },
-  dayTxt: { fontSize:13, fontFamily:"Inter_400Regular", color:"#1A1A1A" },
-  dayTxtSelected: { fontFamily:"Poppins_700Bold", color:"#A8D96C" },
-  dayTxtToday: { fontFamily:"Poppins_700Bold", color:"#0B3D2E" },
-  todayBtn: { backgroundColor:"#0B3D2E", borderRadius:12, paddingVertical:12, alignItems:"center", marginTop:14 },
-  todayBtnTxt: { fontSize:14, fontFamily:"Poppins_700Bold", color:"#A8D96C" },
-});
 
 /**
  * Shared by /staff/reminders and /admin/reminders, which were functionally

@@ -13,8 +13,8 @@ import { registerCacheReset } from "../../utils/sessionCache";
 const STATUS_BAR_HEIGHT = Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 44;
 
 const ROLE_CARDS = [
-  { key: "superadmin", label: "Super Admins", icon: "key",             tint: "#0B3D2E" },
-  { key: "admin",      label: "Admins",       icon: "shield-checkmark", tint: "#3E7B27" },
+  { key: "superadmin", label: "Super Admins", icon: "shield-checkmark", tint: "#0B3D2E" },
+  { key: "admin",      label: "Admins",       icon: "shield-half",      tint: "#3E7B27" },
   { key: "staff",      label: "Staff",        icon: "medkit",           tint: "#7EC8E3" },
   { key: "customer",   label: "Customers",    icon: "paw",              tint: "#E8A0BF" },
 ];

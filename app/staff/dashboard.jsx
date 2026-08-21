@@ -10,6 +10,15 @@ import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
 import { registerCacheReset } from "../../utils/sessionCache";
 
+// Pad to a full six-row grid so the calendar keeps one height all year — an
+// unpadded month renders four, five or six rows and the dialog jumps about.
+const padToSixWeeks = (cells) => {
+  const out = [...cells];
+  while (out.length < 42) out.push(null);
+  return out;
+};
+
+
 const STATUS_BAR_HEIGHT = Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 44;
 
 const STATUS_COLOR = { pending: "#F59E0B", confirmed: "#3E7B27", completed: "#0B3D2E", cancelled: "#C62828" };
@@ -147,10 +156,10 @@ export default function StaffDashboard() {
   const calMonthIdx = calMonth.getMonth();
   const daysInMonth = getDaysInMonth(calYear, calMonthIdx);
   const firstDay = getFirstDayOfMonth(calYear, calMonthIdx);
-  const calDays = [
+  const calDays = padToSixWeeks([
     ...Array(firstDay).fill(null),
     ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
-  ];
+  ]);
   const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const DAY_NAMES = ["Su","Mo","Tu","We","Th","Fr","Sa"];
 

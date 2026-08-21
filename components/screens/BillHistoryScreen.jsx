@@ -112,14 +112,31 @@ export default function BillHistoryScreen({ avoidKeyboard = true }) {
       {/* Summary */}
       <View style={s.summaryRow}>
         <View style={s.summaryBox}>
-          <Ionicons name="receipt-outline" size={18} color="#0B3D2E" />
-          <Text style={s.summaryVal}>{bills.length}</Text>
-          <Text style={s.summaryLabel}>Total Bills</Text>
+          <View style={s.summaryIcon}>
+            <Ionicons name="receipt-outline" size={17} color="#0B3D2E" />
+          </View>
+          <View style={s.summaryText}>
+            <Text style={s.summaryVal} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+              {bills.length}
+            </Text>
+            <Text style={s.summaryLabel} numberOfLines={1}>Total Bills</Text>
+          </View>
         </View>
         <View style={[s.summaryBox, { borderColor: "#A8D96C" }]}>
-          <Ionicons name="cash-outline" size={18} color="#3E7B27" />
-          <Text style={[s.summaryVal, { color: "#3E7B27" }]}>₹{totalRevenue.toLocaleString("en-IN")}</Text>
-          <Text style={s.summaryLabel}>Total Revenue</Text>
+          <View style={[s.summaryIcon, { backgroundColor: "#E8F5E8" }]}>
+            <Ionicons name="cash-outline" size={17} color="#3E7B27" />
+          </View>
+          <View style={s.summaryText}>
+            <Text
+              style={[s.summaryVal, { color: "#3E7B27" }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.6}
+            >
+              ₹{totalRevenue.toLocaleString("en-IN")}
+            </Text>
+            <Text style={s.summaryLabel} numberOfLines={1}>Total Revenue</Text>
+          </View>
         </View>
       </View>
 
@@ -274,12 +291,17 @@ const s = StyleSheet.create({
 
   summaryRow: { flexDirection: "row", gap: 10, padding: 16, paddingBottom: 0 },
   summaryBox: {
-    flex: 1, flexDirection: "row", alignItems: "center", gap: 8,
-    backgroundColor: "#fff", borderRadius: 12, padding: 12,
+    flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 10,
+    backgroundColor: "#fff", borderRadius: 12, paddingVertical: 12, paddingHorizontal: 12,
     borderWidth: 1, borderColor: "#D4EDD4", elevation: 1,
   },
+  summaryIcon: {
+    width: 34, height: 34, borderRadius: 10, backgroundColor: "#F0F7F0",
+    justifyContent: "center", alignItems: "center",
+  },
+  summaryText: { flex: 1, minWidth: 0 },
   summaryVal: { fontSize: 16, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
-  summaryLabel: { fontSize: 10, fontFamily: "Inter_400Regular", color: "#666" },
+  summaryLabel: { fontSize: 10, fontFamily: "Inter_400Regular", color: "#666", marginTop: 1 },
 
   filterRow: { flexDirection: "row", gap: 8, paddingHorizontal: 16, paddingBottom: 8, paddingTop: 4 },
   filterChip: { paddingHorizontal: 16, paddingVertical: 7, borderRadius: 20, backgroundColor: "#fff", borderWidth: 1, borderColor: "#D4EDD4" },

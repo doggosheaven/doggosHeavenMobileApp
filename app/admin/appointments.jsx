@@ -12,6 +12,7 @@ import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
 import { registerCacheReset } from "../../utils/sessionCache";
 import { buildInvoiceHTML, downloadInvoicePDF } from "../../utils/invoiceGenerator";
+import CalendarModal from "../../components/CalendarModal";
 
 const FILTERS = ["All", "Pending", "Confirmed", "Completed", "Cancelled"];
 const STATUS_COLOR = { pending: "#F59E0B", confirmed: "#3E7B27", completed: "#0B3D2E", cancelled: "#C62828" };
@@ -20,52 +21,6 @@ const STATUS_BG    = { pending: "#FFF9E6", confirmed: "#E8F5E8", completed: "#E8
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const DAY_NAMES   = ["Su","Mo","Tu","We","Th","Fr","Sa"];
 
-function CalendarModal({ visible, selectedDate, onSelect, onClose }) {
-  const [calMonth, setCalMonth] = useState(selectedDate || new Date());
-  const year  = calMonth.getFullYear();
-  const month = calMonth.getMonth();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const firstDay    = new Date(year, month, 1).getDay();
-  const isSameDay   = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
-  const calDays     = [...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <TouchableOpacity style={cal.overlay} activeOpacity={1} onPress={onClose}>
-        <TouchableOpacity activeOpacity={1} style={cal.box}>
-          <View style={cal.header}>
-            <TouchableOpacity onPress={() => setCalMonth(new Date(year, month-1, 1))} hitSlop={{top:8,bottom:8,left:8,right:8}}>
-              <Ionicons name="chevron-back" size={20} color="#0B3D2E" />
-            </TouchableOpacity>
-            <Text style={cal.monthTxt}>{MONTH_NAMES[month]} {year}</Text>
-            <TouchableOpacity onPress={() => setCalMonth(new Date(year, month+1, 1))} hitSlop={{top:8,bottom:8,left:8,right:8}}>
-              <Ionicons name="chevron-forward" size={20} color="#0B3D2E" />
-            </TouchableOpacity>
-          </View>
-          <View style={cal.dayRow}>
-            {DAY_NAMES.map(d => <Text key={d} style={cal.dayName}>{d}</Text>)}
-          </View>
-          <FlatList
-            data={calDays} numColumns={7} keyExtractor={(_,i)=>String(i)} scrollEnabled={false}
-            renderItem={({item:day}) => {
-              if (!day) return <View style={cal.dayEmpty}/>;
-              const thisDate = new Date(year, month, day);
-              const isSel    = selectedDate && isSameDay(thisDate, selectedDate);
-              const isToday  = isSameDay(thisDate, new Date());
-              return (
-                <TouchableOpacity style={[cal.day, isSel && cal.daySelected, isToday && !isSel && cal.dayToday]} onPress={()=>{onSelect(thisDate);onClose();}} activeOpacity={0.7}>
-                  <Text style={[cal.dayTxt, isSel && cal.dayTxtSelected, isToday && !isSel && cal.dayTxtToday]}>{day}</Text>
-                </TouchableOpacity>
-              );
-            }}
-          />
-          <TouchableOpacity style={cal.todayBtn} onPress={()=>{onSelect(new Date());onClose();}} activeOpacity={0.8}>
-            <Text style={cal.todayBtnTxt}>Go to Today</Text>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </TouchableOpacity>
-    </Modal>
-  );
-}
 
 const cal = StyleSheet.create({
   overlay: {flex:1,backgroundColor:"rgba(0,0,0,0.45)",justifyContent:"center",alignItems:"center"},

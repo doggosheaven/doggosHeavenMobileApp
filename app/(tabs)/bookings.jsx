@@ -9,6 +9,15 @@ import Header from "../../components/Header";
 import { useApp } from "../../context/AppContext";
 import { BASE_URL } from "../../constants/api";
 
+// Pad to a full six-row grid so the calendar keeps one height all year — an
+// unpadded month renders four, five or six rows and the dialog jumps about.
+const padToSixWeeks = (cells) => {
+  const out = [...cells];
+  while (out.length < 42) out.push(null);
+  return out;
+};
+
+
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const DAY_NAMES = ["Su","Mo","Tu","We","Th","Fr","Sa"];
 
@@ -95,7 +104,7 @@ export default function BookingsScreen() {
   const calMonthIdx = calMonth.getMonth();
   const daysInMonth = new Date(calYear, calMonthIdx + 1, 0).getDate();
   const firstDay = new Date(calYear, calMonthIdx, 1).getDay();
-  const calDays = [...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
+  const calDays = padToSixWeeks([...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)]);
   const fmtSelectedDate = selectedDate ? selectedDate.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "";
 
   const activeFilter = FILTERS.find((f) => f.key === filter);

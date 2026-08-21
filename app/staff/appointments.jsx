@@ -14,6 +14,15 @@ import { BASE_URL } from "../../constants/api";
 import { buildInvoiceHTML, downloadInvoicePDF } from "../../utils/invoiceGenerator";
 import { useStaff } from "../../context/StaffContext";
 
+// Pad to a full six-row grid so the calendar keeps one height all year — an
+// unpadded month renders four, five or six rows and the dialog jumps about.
+const padToSixWeeks = (cells) => {
+  const out = [...cells];
+  while (out.length < 42) out.push(null);
+  return out;
+};
+
+
 const FILTERS = ["All", "Pending", "Confirmed", "Completed", "Cancelled"];
 const STATUS_COLOR = { pending: "#F59E0B", confirmed: "#3E7B27", completed: "#0B3D2E", cancelled: "#C62828" };
 const STATUS_BG    = { pending: "#FFF9E6", confirmed: "#E8F5E8", completed: "#E8F5E8", cancelled: "#FFEBEE" };
@@ -206,7 +215,7 @@ const handleUpdateStatus = async (id, status, extraBody = {}) => {
   const calMonthIdx = calMonth.getMonth();
   const daysInMonth = new Date(calYear, calMonthIdx + 1, 0).getDate();
   const firstDay = new Date(calYear, calMonthIdx, 1).getDay();
-  const calDays = [...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
+  const calDays = padToSixWeeks([...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)]);
   const isSameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
 
   const dateFiltered = selectedDate
