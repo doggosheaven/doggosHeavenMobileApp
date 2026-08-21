@@ -2,7 +2,32 @@ import { Stack, useRouter, usePathname } from "expo-router";
 import { View, TouchableOpacity, Text, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useEffect } from "react";
+import * as Notifications from "expo-notifications";
 import RoleGate from "../../components/RoleGate";
+import { getAuth } from "../../utils/authStorage";
+import { BASE_URL } from "../../constants/api";
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({ shouldShowAlert: true, shouldPlaySound: true, shouldSetBadge: true }),
+});
+
+// Without this the superadmin has no push token on file, so booking alerts
+// broadcast to staff and admin never reach them.
+async function registerSuperAdminPushToken() {
+  try {
+    const { status } = await Notifications.requestPermissionsAsync();
+    if (status !== "granted") return;
+    const { data: token } = await Notifications.getExpoPushTokenAsync();
+    const { token: authToken } = await getAuth();
+    if (!authToken || !token) return;
+    await fetch(`${BASE_URL}/api/v1/customerappointment/savepushtoken`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: authToken },
+      body: JSON.stringify({ expoPushToken: token }),
+    });
+  } catch {}
+}
 
 const TABS = [
   { name: "dashboard", label: "Overview", icon: "speedometer-outline" },
@@ -45,6 +70,8 @@ function SuperAdminTabBar() {
 }
 
 export default function SuperAdminLayout() {
+  useEffect(() => { registerSuperAdminPushToken(); }, []);
+
   return (
     <RoleGate allow={["superadmin"]}>
       <View style={{ flex: 1 }}>

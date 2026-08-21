@@ -373,19 +373,30 @@ export default function SuperAdminUsers() {
 
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               <Text style={s.label}>Role</Text>
-              <View style={s.roleGrid}>
-                {ROLES.map((r) => (
-                  <TouchableOpacity
-                    key={r.value}
-                    style={[s.rolePick, form.role === r.value && { borderColor: r.tint, backgroundColor: "#F0F7F0" }]}
-                    onPress={() => setForm((p) => ({ ...p, role: r.value }))}
-                    activeOpacity={0.85}
-                  >
-                    <Ionicons name={r.icon} size={16} color={r.tint} />
-                    <Text style={s.rolePickTxt}>{r.label}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+              {editing?.role === "superadmin" ? (
+                // The one superadmin cannot be re-roled, so show it rather than
+                // offering choices the server will reject.
+                <View style={s.roleLocked}>
+                  <Ionicons name="shield-checkmark" size={16} color="#0B3D2E" />
+                  <Text style={s.roleLockedTxt}>Super Admin</Text>
+                  <Ionicons name="lock-closed" size={13} color="#8A9A8A" />
+                </View>
+              ) : (
+                <View style={s.roleGrid}>
+                  {/* Superadmin is not offered — the system keeps exactly one. */}
+                  {ROLES.filter((r) => r.value !== "superadmin").map((r) => (
+                    <TouchableOpacity
+                      key={r.value}
+                      style={[s.rolePick, form.role === r.value && { borderColor: r.tint, backgroundColor: "#F0F7F0" }]}
+                      onPress={() => setForm((p) => ({ ...p, role: r.value }))}
+                      activeOpacity={0.85}
+                    >
+                      <Ionicons name={r.icon} size={16} color={r.tint} />
+                      <Text style={s.rolePickTxt}>{r.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
 
               <Text style={s.label}>Full name *</Text>
               <View style={s.inputBox}>
@@ -616,6 +627,12 @@ const s = StyleSheet.create({
     borderWidth: 1.5, borderColor: "#D4EDD4",
   },
   rolePickTxt: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+  roleLocked: {
+    flexDirection: "row", alignItems: "center", gap: 8, alignSelf: "flex-start",
+    backgroundColor: "#E8F5E8", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10,
+    borderWidth: 1.5, borderColor: "#0B3D2E",
+  },
+  roleLockedTxt: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
 
   saveBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
