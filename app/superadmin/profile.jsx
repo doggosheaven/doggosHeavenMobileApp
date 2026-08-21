@@ -1,11 +1,12 @@
 import { useState, useCallback } from "react";
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput,
-  Alert, ActivityIndicator, Platform, StatusBar,
+  Alert, ActivityIndicator, Platform, StatusBar, Image,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import * as ImagePicker from "expo-image-picker";
 import { getAuth, clearAuth, saveAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
 
@@ -22,6 +23,7 @@ export default function SuperAdminProfile() {
   const [pwOpen, setPwOpen] = useState(false);
   const [pw, setPw] = useState({ currentPassword: "", newPassword: "" });
   const [pwSaving, setPwSaving] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   useFocusEffect(useCallback(() => {
     getAuth().then(({ token: t, user: u }) => {
@@ -72,6 +74,39 @@ export default function SuperAdminProfile() {
     finally { setPwSaving(false); }
   };
 
+  const pickPhoto = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission needed", "Allow photo access to update your picture.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true, aspect: [1, 1], quality: 0.7,
+    });
+    if (result.canceled) return;
+
+    const uri = result.assets[0].uri;
+    setUploadingPhoto(true);
+    try {
+      const formData = new FormData();
+      formData.append("profilePhoto", { uri, name: "profile.jpg", type: "image/jpeg" });
+      const res = await fetch(`${BASE_URL}/api/v1/auth/updateprofilephoto`, {
+        method: "PUT",
+        headers: { Authorization: token },
+        body: formData,
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message || "Upload failed");
+      const updated = { ...user, profilePhoto: data.profilePhoto || uri };
+      await saveAuth(token, updated);
+      setUser(updated);
+      Alert.alert("Done ✅", "Profile photo updated.");
+    } catch (e) {
+      Alert.alert("Upload failed", e?.message || "Could not upload the photo. Try again.");
+    } finally { setUploadingPhoto(false); }
+  };
+
   const logout = () => {
     Alert.alert("Logout", "Are you sure you want to sign out?", [
       { text: "Cancel", style: "cancel" },
@@ -84,7 +119,18 @@ export default function SuperAdminProfile() {
   return (
     <View style={s.container}>
       <View style={[s.header, { paddingTop: STATUS_BAR_HEIGHT + 12 }]}>
-        <View style={s.avatar}><Text style={s.avatarTxt}>{initials(user?.fullName)}</Text></View>
+        <TouchableOpacity onPress={pickPhoto} activeOpacity={0.85} disabled={uploadingPhoto}>
+          {user?.profilePhoto ? (
+            <Image source={{ uri: user.profilePhoto }} style={s.avatarImg} />
+          ) : (
+            <View style={s.avatar}><Text style={s.avatarTxt}>{initials(user?.fullName)}</Text></View>
+          )}
+          <View style={s.camBadge}>
+            {uploadingPhoto
+              ? <ActivityIndicator size="small" color="#0B3D2E" />
+              : <Ionicons name="camera" size={13} color="#0B3D2E" />}
+          </View>
+        </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={s.name}>{user?.fullName || "Super Admin"}</Text>
           <Text style={s.email}>{user?.email}</Text>
@@ -185,6 +231,13 @@ const s = StyleSheet.create({
     justifyContent: "center", alignItems: "center",
   },
   avatarTxt: { fontSize: 20, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+  avatarImg: { width: 58, height: 58, borderRadius: 29, backgroundColor: "#E8F5E8" },
+  camBadge: {
+    position: "absolute", right: -2, bottom: -2,
+    width: 22, height: 22, borderRadius: 11, backgroundColor: "#A8D96C",
+    justifyContent: "center", alignItems: "center",
+    borderWidth: 2, borderColor: "#0B3D2E",
+  },
   name: { fontSize: 18, fontFamily: "Poppins_700Bold", color: "#fff" },
   email: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#8A9A8A", marginTop: 1 },
   badge: {

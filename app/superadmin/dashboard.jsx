@@ -9,6 +9,7 @@ import { useRouter } from "expo-router";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
 import { registerCacheReset } from "../../utils/sessionCache";
+import { ErrorState } from "../../components/ScreenState";
 
 const STATUS_BAR_HEIGHT = Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 44;
 
@@ -30,7 +31,10 @@ const TOTAL_ROWS = [
   { key: "bills",         label: "Bills",             icon: "receipt-outline",       route: "/admin/billhistory" },
   { key: "boardings",     label: "Boardings",         icon: "home-outline",          route: "/admin/deboard" },
   { key: "activeBoardingSubscriptions", label: "Active Boarding Subs", icon: "repeat-outline", route: "/admin/boardingsubscriptions" },
-  { key: "unreadAlerts",  label: "Unread Alerts",     icon: "notifications-outline", route: "/admin/notifications" },
+  { key: "pendingAppointments", label: "Pending Bookings", icon: "hourglass-outline", route: "/admin/appointments", attention: true },
+  { key: "pendingUnblocks", label: "Unblock Requests", icon: "lock-open-outline",     route: "/admin/unblock-requests", attention: true },
+  { key: "blacklistedPets", label: "Blacklisted Pets", icon: "ban-outline",           route: "/admin/blacklisted",      attention: true },
+  { key: "unreadAlerts",  label: "Unread Alerts",     icon: "notifications-outline",  route: "/admin/notifications",    attention: true },
 ];
 
 let _cached = null;
@@ -42,6 +46,7 @@ export default function SuperAdminDashboard() {
   const [data, setData] = useState(_cached);
   const [loading, setLoading] = useState(!_cached);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -50,8 +55,12 @@ export default function SuperAdminDashboard() {
         headers: { Authorization: token || "" },
       });
       const json = await res.json();
-      if (json.success) { setData(json); _cached = json; }
-    } catch (e) { if (__DEV__) console.log(e); }
+      if (json.success) { setData(json); _cached = json; setError(false); }
+      else setError(true);
+    } catch (e) {
+      if (__DEV__) console.log(e);
+      setError(true);
+    }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 
@@ -63,6 +72,17 @@ export default function SuperAdminDashboard() {
     return (
       <View style={s.loadingBox}>
         <ActivityIndicator size="large" color="#A8D96C" />
+      </View>
+    );
+  }
+
+  if (error && !data) {
+    return (
+      <View style={s.loadingBox}>
+        <ErrorState
+          message="Could not load the overview. Check your connection."
+          onRetry={() => { setLoading(true); setError(false); load(); }}
+        />
       </View>
     );
   }
@@ -138,9 +158,20 @@ export default function SuperAdminDashboard() {
               onPress={() => router.push(row.route)}
               activeOpacity={0.6}
             >
-              <Ionicons name={row.icon} size={17} color="#3E7B27" style={{ width: 26 }} />
+              <Ionicons
+                name={row.icon}
+                size={17}
+                color={row.attention && (data?.totals?.[row.key] ?? 0) > 0 ? "#B8860B" : "#3E7B27"}
+                style={{ width: 26 }}
+              />
               <Text style={s.listLabel}>{row.label}</Text>
-              <Text style={s.listValue}>{data?.totals?.[row.key] ?? 0}</Text>
+              {row.attention && (data?.totals?.[row.key] ?? 0) > 0 ? (
+                <View style={s.attentionChip}>
+                  <Text style={s.attentionTxt}>{data.totals[row.key]}</Text>
+                </View>
+              ) : (
+                <Text style={s.listValue}>{data?.totals?.[row.key] ?? 0}</Text>
+              )}
               <Ionicons name="chevron-forward" size={15} color="#B9C9B9" style={{ marginLeft: 6 }} />
             </TouchableOpacity>
           ))}
@@ -210,6 +241,11 @@ const s = StyleSheet.create({
   },
   listLabel: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", color: "#1A1A1A" },
   listValue: { fontSize: 15, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+  attentionChip: {
+    backgroundColor: "#FFF9E6", borderRadius: 10, paddingHorizontal: 9, paddingVertical: 3,
+    borderWidth: 1, borderColor: "#FFE082",
+  },
+  attentionTxt: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#B8860B" },
 
   consoleBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,

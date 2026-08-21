@@ -9,6 +9,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
+import { ErrorState, EmptyState } from "../../components/ScreenState";
 
 const STATUS_BAR_HEIGHT = Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 44;
 
@@ -24,9 +25,14 @@ export default function SuperAdminUsers() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
+  const PAGE_SIZE = 50;
   const [users, setUsers] = useState([]);
   const [counts, setCounts] = useState({});
   const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pages, setPages] = useState(1);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [token, setToken] = useState("");
@@ -46,28 +52,52 @@ export default function SuperAdminUsers() {
 
   const searchTimer = useRef(null);
 
+  const fetchPage = useCallback(async (wanted) => {
+    const { token: t, user: me } = await getAuth();
+    setToken(t || "");
+    setMeId(me?.id || me?._id || null);
+    const q = new URLSearchParams({ limit: String(PAGE_SIZE), page: String(wanted) });
+    if (roleFilter) q.set("role", roleFilter);
+    if (search.trim()) q.set("search", search.trim());
+    if (includeInactive) q.set("includeInactive", "1");
+
+    const res = await fetch(`${BASE_URL}/api/v1/superadmin/users?${q}`, {
+      headers: { Authorization: t || "" },
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.message || "Request failed");
+    return json;
+  }, [roleFilter, search, includeInactive]);
+
   const load = useCallback(async () => {
     try {
-      const { token: t, user: me } = await getAuth();
-      setToken(t || "");
-      setMeId(me?.id || me?._id || null);
-      const q = new URLSearchParams({ limit: "200" });
-      if (roleFilter) q.set("role", roleFilter);
-      if (search.trim()) q.set("search", search.trim());
-      if (includeInactive) q.set("includeInactive", "1");
-
-      const res = await fetch(`${BASE_URL}/api/v1/superadmin/users?${q}`, {
-        headers: { Authorization: t || "" },
-      });
-      const json = await res.json();
-      if (json.success) {
-        setUsers(json.users || []);
-        setCounts(json.counts || {});
-        setTotal(json.total || 0);
-      }
-    } catch (e) { if (__DEV__) console.log(e); }
+      const json = await fetchPage(1);
+      setUsers(json.users || []);
+      setCounts(json.counts || {});
+      setTotal(json.total || 0);
+      setPages(json.pages || 1);
+      setPage(1);
+      setError(false);
+    } catch (e) {
+      if (__DEV__) console.log(e);
+      setError(true);
+    }
     finally { setLoading(false); setRefreshing(false); }
-  }, [roleFilter, search, includeInactive]);
+  }, [fetchPage]);
+
+  // Appends the next page rather than replacing — the list used to ask for 200
+  // rows and quietly drop anyone past that.
+  const loadMore = useCallback(async () => {
+    if (loadingMore || page >= pages) return;
+    setLoadingMore(true);
+    try {
+      const json = await fetchPage(page + 1);
+      setUsers((prev) => [...prev, ...(json.users || [])]);
+      setPage(page + 1);
+      setPages(json.pages || pages);
+    } catch (e) { if (__DEV__) console.log(e); }
+    finally { setLoadingMore(false); }
+  }, [fetchPage, loadingMore, page, pages]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -96,7 +126,11 @@ export default function SuperAdminUsers() {
       });
       const json = await res.json();
       if (json.success) setDetail(json);
-    } catch (e) { if (__DEV__) console.log(e); }
+      else Alert.alert("Error", json.message || "Could not load this user.");
+    } catch (e) {
+      if (__DEV__) console.log(e);
+      Alert.alert("Error", "Could not load this user. Check your connection.");
+    }
     finally { setDetailLoading(false); }
   };
 
@@ -236,6 +270,11 @@ export default function SuperAdminUsers() {
       {/* List */}
       {loading ? (
         <ActivityIndicator size="large" color="#A8D96C" style={{ flex: 1 }} />
+      ) : error ? (
+        <ErrorState
+          message="Could not load the user list. Check your connection."
+          onRetry={() => { setLoading(true); setError(false); load(); }}
+        />
       ) : (
         <ScrollView
           contentContainerStyle={s.scroll}
@@ -243,10 +282,22 @@ export default function SuperAdminUsers() {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor="#A8D96C" />}
         >
           {users.length === 0 ? (
-            <View style={s.empty}>
-              <Ionicons name="people-outline" size={48} color="#ccc" />
-              <Text style={s.emptyTxt}>No users found</Text>
-            </View>
+            <EmptyState
+              icon="people-outline"
+              title="No users found"
+              subtitle={
+                search.trim() || roleFilter
+                  ? "Nothing matches these filters. Try clearing them."
+                  : "Add the first person to get started."
+              }
+              actionLabel={search.trim() || roleFilter ? "Clear filters" : "Add person"}
+              actionIcon={search.trim() || roleFilter ? "close-circle-outline" : "person-add-outline"}
+              onAction={() => {
+                if (search.trim() || roleFilter) {
+                  setSearch(""); setRoleFilter(""); setIncludeInactive(false);
+                } else openAdd();
+              }}
+            />
           ) : (
             users.map((u) => {
               const meta = roleMeta(u.role);
@@ -282,6 +333,27 @@ export default function SuperAdminUsers() {
                 </TouchableOpacity>
               );
             })
+          )}
+          {users.length > 0 && (
+            page < pages ? (
+              <TouchableOpacity
+                style={s.moreBtn}
+                onPress={loadMore}
+                disabled={loadingMore}
+                activeOpacity={0.85}
+              >
+                {loadingMore ? (
+                  <ActivityIndicator size="small" color="#0B3D2E" />
+                ) : (
+                  <>
+                    <Ionicons name="chevron-down" size={16} color="#0B3D2E" />
+                    <Text style={s.moreTxt}>Load more ({users.length} of {total})</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            ) : (
+              <Text style={s.allShown}>All {total} shown</Text>
+            )
           )}
           <View style={{ height: 30 }} />
         </ScrollView>
@@ -492,8 +564,16 @@ const s = StyleSheet.create({
   chipTxtActive: { color: "#0B3D2E" },
 
   scroll: { paddingHorizontal: 16, paddingBottom: 20 },
-  empty: { alignItems: "center", paddingVertical: 60, gap: 10 },
-  emptyTxt: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#8A9A8A" },
+  moreBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    backgroundColor: "#fff", borderRadius: 12, paddingVertical: 13, marginTop: 4,
+    borderWidth: 1, borderColor: "#D4EDD4",
+  },
+  moreTxt: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+  allShown: {
+    textAlign: "center", marginTop: 10,
+    fontSize: 12, fontFamily: "Inter_400Regular", color: "#8A9A8A",
+  },
 
   card: {
     flexDirection: "row", alignItems: "center", gap: 12,

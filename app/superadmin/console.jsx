@@ -1,6 +1,10 @@
+import { useCallback, useState } from "react";
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Platform, StatusBar } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { getAuth } from "../../utils/authStorage";
+import { BASE_URL } from "../../constants/api";
 
 const STATUS_BAR_HEIGHT = Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 44;
 
@@ -15,14 +19,14 @@ const GROUPS = [
       { label: "All Users",        icon: "people-outline",            route: "/superadmin/users" },
       { label: "Add Person",       icon: "person-add-outline",        route: "/superadmin/adduser" },
       { label: "Staff & Revenue",  icon: "briefcase-outline",         route: "/admin/staff" },
-      { label: "Unblock Requests", icon: "lock-open-outline",         route: "/admin/unblock-requests" },
-      { label: "Blacklisted Pets", icon: "ban-outline",               route: "/admin/blacklisted" },
+      { label: "Unblock Requests", icon: "lock-open-outline",         route: "/admin/unblock-requests", badge: "pendingUnblocks" },
+      { label: "Blacklisted Pets", icon: "ban-outline",               route: "/admin/blacklisted", badge: "blacklistedPets" },
     ],
   },
   {
     title: "Operations",
     items: [
-      { label: "All Bookings",     icon: "calendar-outline",          route: "/admin/appointments" },
+      { label: "All Bookings",     icon: "calendar-outline",          route: "/admin/appointments", badge: "pendingAppointments" },
       { label: "Pet Master",       icon: "paw-outline",               route: "/admin/petmaster" },
       { label: "Total Visits",     icon: "clipboard-outline",         route: "/admin/totalvisits" },
       { label: "Attendance",       icon: "checkbox-outline",          route: "/admin/attendance" },
@@ -53,13 +57,31 @@ const GROUPS = [
   {
     title: "Alerts",
     items: [
-      { label: "Notifications",    icon: "alert-circle-outline",      route: "/admin/notifications" },
+      { label: "Notifications",    icon: "alert-circle-outline",      route: "/admin/notifications", badge: "unreadAlerts" },
     ],
   },
 ];
 
 export default function SuperAdminConsole() {
   const router = useRouter();
+  const [totals, setTotals] = useState({});
+
+  // Badge counts so the grid shows where attention is due, rather than being
+  // twenty-two identical tiles.
+  useFocusEffect(useCallback(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const { token } = await getAuth();
+        const res = await fetch(`${BASE_URL}/api/v1/superadmin/overview`, {
+          headers: { Authorization: token || "" },
+        });
+        const json = await res.json();
+        if (alive && json.success) setTotals(json.totals || {});
+      } catch (e) { if (__DEV__) console.log(e); }
+    })();
+    return () => { alive = false; };
+  }, []));
 
   return (
     <View style={s.container}>
@@ -84,6 +106,13 @@ export default function SuperAdminConsole() {
                 >
                   <View style={s.tileIcon}>
                     <Ionicons name={item.icon} size={19} color="#A8D96C" />
+                    {item.badge && totals[item.badge] > 0 && (
+                      <View style={s.badge}>
+                        <Text style={s.badgeTxt}>
+                          {totals[item.badge] > 99 ? "99+" : totals[item.badge]}
+                        </Text>
+                      </View>
+                    )}
                   </View>
                   <Text style={s.tileTxt} numberOfLines={2}>{item.label}</Text>
                 </TouchableOpacity>
@@ -119,4 +148,11 @@ const s = StyleSheet.create({
     justifyContent: "center", alignItems: "center",
   },
   tileTxt: { fontSize: 11, fontFamily: "Poppins_700Bold", color: "#0B3D2E", textAlign: "center" },
+  badge: {
+    position: "absolute", top: -5, right: -6, minWidth: 19, height: 19,
+    borderRadius: 10, paddingHorizontal: 5, backgroundColor: "#C62828",
+    justifyContent: "center", alignItems: "center",
+    borderWidth: 2, borderColor: "#fff",
+  },
+  badgeTxt: { fontSize: 9, fontFamily: "Poppins_700Bold", color: "#fff" },
 });

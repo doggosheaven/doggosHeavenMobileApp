@@ -8,6 +8,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
+import { ErrorState, EmptyState } from "../../components/ScreenState";
+import CalendarModal from "../../components/CalendarModal";
 
 const STATUS_BAR_HEIGHT = Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 44;
 
@@ -22,6 +24,7 @@ const PRESETS = [
   { key: "today", label: "Today" },
   { key: "week",  label: "Last 7 days" },
   { key: "month", label: "This month" },
+  { key: "custom", label: "Custom" },
 ];
 
 const rangeFor = (key) => {
@@ -46,11 +49,18 @@ export default function SuperAdminRevenue() {
   const [refreshing, setRefreshing] = useState(false);
   const [preset, setPreset] = useState("all");
   const [detail, setDetail] = useState(null);
+  const [error, setError] = useState(false);
+  // Custom range: pick a start, then an end.
+  const [custom, setCustom] = useState({ from: null, to: null });
+  const [picking, setPicking] = useState(null); // null | "from" | "to"
 
   const load = useCallback(async () => {
     try {
       const { token } = await getAuth();
-      const { from, to } = rangeFor(preset);
+      const { from, to } =
+        preset === "custom"
+          ? { from: custom.from ? toISO(custom.from) : null, to: custom.to ? toISO(custom.to) : null }
+          : rangeFor(preset);
       const q = new URLSearchParams();
       if (from) q.set("from", from);
       if (to) q.set("to", to);
@@ -58,10 +68,14 @@ export default function SuperAdminRevenue() {
         headers: { Authorization: token || "" },
       });
       const json = await res.json();
-      if (json.success) setData(json);
-    } catch (e) { if (__DEV__) console.log(e); }
+      if (json.success) { setData(json); setError(false); }
+      else setError(true);
+    } catch (e) {
+      if (__DEV__) console.log(e);
+      setError(true);
+    }
     finally { setLoading(false); setRefreshing(false); }
-  }, [preset]);
+  }, [preset, custom]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -85,7 +99,10 @@ export default function SuperAdminRevenue() {
           <TouchableOpacity
             key={p.key}
             style={[s.chip, preset === p.key && s.chipActive]}
-            onPress={() => { setPreset(p.key); setLoading(true); }}
+            onPress={() => {
+              if (p.key === "custom") { setPreset("custom"); setPicking("from"); return; }
+              setPreset(p.key); setLoading(true);
+            }}
             activeOpacity={0.8}
           >
             <Text style={[s.chipTxt, preset === p.key && s.chipTxtActive]}>{p.label}</Text>
@@ -93,8 +110,23 @@ export default function SuperAdminRevenue() {
         ))}
       </View>
 
+      {preset === "custom" && (custom.from || custom.to) && (
+        <TouchableOpacity style={s.rangeBar} onPress={() => setPicking("from")} activeOpacity={0.8}>
+          <Ionicons name="calendar-outline" size={15} color="#3E7B27" />
+          <Text style={s.rangeTxt}>
+            {custom.from ? toISO(custom.from) : "…"} to {custom.to ? toISO(custom.to) : "…"}
+          </Text>
+          <Ionicons name="create-outline" size={15} color="#8A9A8A" />
+        </TouchableOpacity>
+      )}
+
       {loading ? (
         <ActivityIndicator size="large" color="#0B3D2E" style={{ flex: 1 }} />
+      ) : error ? (
+        <ErrorState
+          message="Could not load the revenue figures. Check your connection."
+          onRetry={() => { setLoading(true); setError(false); load(); }}
+        />
       ) : (
         <ScrollView
           contentContainerStyle={s.scroll}
@@ -117,10 +149,14 @@ export default function SuperAdminRevenue() {
           </View>
 
           {(data?.staff || []).length === 0 ? (
-            <View style={s.empty}>
-              <Ionicons name="cash-outline" size={46} color="#B9C9B9" />
-              <Text style={s.emptyTxt}>Nothing recorded for this period</Text>
-            </View>
+            <EmptyState
+              icon="cash-outline"
+              title="Nothing recorded for this period"
+              subtitle="Try a wider date range."
+              actionLabel="Show all time"
+              actionIcon="infinite-outline"
+              onAction={() => { setPreset("all"); setLoading(true); }}
+            />
           ) : (
             (data?.staff || []).map((p) => (
               <TouchableOpacity key={p._id} style={s.card} activeOpacity={0.85} onPress={() => setDetail(p)}>
@@ -152,6 +188,25 @@ export default function SuperAdminRevenue() {
           <View style={{ height: 30 }} />
         </ScrollView>
       )}
+
+      {/* Custom range picker: start, then end */}
+      <CalendarModal
+        visible={picking !== null}
+        selectedDate={picking === "to" ? custom.to || custom.from : custom.from}
+        onClose={() => setPicking(null)}
+        onSelect={(d) => {
+          if (picking === "from") {
+            setCustom({ from: d, to: null });
+            setTimeout(() => setPicking("to"), 250);
+          } else {
+            const from = custom.from || d;
+            const [a2, b2] = d < from ? [d, from] : [from, d];
+            setCustom({ from: a2, to: b2 });
+            setPicking(null);
+            setLoading(true);
+          }
+        }}
+      />
 
       {/* Breakdown */}
       <Modal visible={!!detail} transparent animationType="slide" onRequestClose={() => setDetail(null)}>
@@ -188,7 +243,11 @@ export default function SuperAdminRevenue() {
                 <TouchableOpacity
                   style={s.fullBtn}
                   activeOpacity={0.85}
-                  onPress={() => { const id = detail._id; setDetail(null); router.push(`/superadmin/users?search=${encodeURIComponent(detail.email)}`); void id; }}
+                  onPress={() => {
+                    const email = detail.email;
+                    setDetail(null);
+                    router.push(`/superadmin/users?search=${encodeURIComponent(email)}`);
+                  }}
                 >
                   <Ionicons name="open-outline" size={17} color="#A8D96C" />
                   <Text style={s.fullBtnTxt}>Open in Users</Text>
@@ -246,6 +305,13 @@ const s = StyleSheet.create({
   headerSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#A8D96C" },
 
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingHorizontal: 16, paddingVertical: 12 },
+  rangeBar: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    marginHorizontal: 16, marginBottom: 10,
+    backgroundColor: "#fff", borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10,
+    borderWidth: 1, borderColor: "#D4EDD4",
+  },
+  rangeTxt: { flex: 1, fontSize: 12, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
   chip: {
     backgroundColor: "#fff", borderRadius: 20, paddingHorizontal: 12, paddingVertical: 7,
     borderWidth: 1, borderColor: "#D4EDD4",

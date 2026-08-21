@@ -39,29 +39,18 @@ function CalendarModal({ visible, selectedDate, onSelect, onClose, token }) {
   const calDays = padToSixWeeks([...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)]);
 
   
+  // One request for the whole month. This used to fire a request per day —
+  // up to 31 in parallel — just to decide which days get a dot.
   const fetchActiveDates = useCallback(async (y, m) => {
     setLoadingDots(true);
     try {
-      const newSet = new Set();
-      const daysCount = new Date(y, m + 1, 0).getDate();
-      const today = new Date();
-      
-      const promises = Array.from({ length: daysCount }, (_, i) => {
-        const d = new Date(y, m, i + 1);
-        if (d > today) return Promise.resolve(null);
-        const iso = d.toISOString().split("T")[0];
-        return fetch(`${BASE_URL}/api/v1/visit/getvisitlist?date=${iso}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: token || "" },
-        })
-          .then(r => r.json())
-          .then(j => ({ iso, count: (j.List || []).length }))
-          .catch(() => null);
-      });
-      const results = await Promise.all(promises);
-      results.forEach(r => { if (r && r.count > 0) newSet.add(r.iso); });
-      setActiveDates(newSet);
-    } catch (e) { console.log(e); }
+      const res = await fetch(
+        `${BASE_URL}/api/v1/visit/activedates?year=${y}&month=${m + 1}`,
+        { headers: { Authorization: token || "" } }
+      );
+      const json = await res.json();
+      setActiveDates(new Set(json.success ? json.dates || [] : []));
+    } catch (e) { if (__DEV__) console.log(e); }
     finally { setLoadingDots(false); }
   }, [token]);
 
