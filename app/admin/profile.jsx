@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert,
+  View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert, RefreshControl,
   Modal, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, Image,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
@@ -18,13 +18,16 @@ export default function AdminProfile() {
   const [form, setForm] = useState({ fullName: "", phone: "" });
   const [saving, setSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useFocusEffect(useCallback(() => {
-    getAuth().then(({ user: u, token: t }) => {
-      setUser(u);
-      setToken(t || "");
-    });
-  }, []));
+  const loadAuth = useCallback(async () => {
+    const { user: u, token: t } = await getAuth();
+    setUser(u);
+    setToken(t || "");
+    setRefreshing(false);
+  }, []);
+
+  useFocusEffect(useCallback(() => { loadAuth(); }, [loadAuth]));
 
   const getInitials = (name) => {
     if (!name) return "A";
@@ -138,7 +141,17 @@ export default function AdminProfile() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scroll}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => { setRefreshing(true); loadAuth(); }}
+            tintColor="#0B3D2E"
+          />
+        }
+      >
         {/* Avatar Card */}
         <View style={styles.avatarCard}>
           <TouchableOpacity style={styles.avatarWrapper} onPress={handlePhotoOptions} activeOpacity={0.8}>

@@ -9,6 +9,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
+import { ErrorState } from "../../components/ScreenState";
 
 const fmtDate = (d) =>
   d ? new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
@@ -48,7 +49,10 @@ function PetDetail({ pet, onBack }) {
       });
       const json = await res.json();
       setVisits(json.visits || json.data || []);
-    } catch (e) { console.log(e); }
+    } catch (e) {
+      if (__DEV__) console.log(e);
+      Alert.alert("Error", "Could not load this pet's visits.");
+    }
     finally { setVisitsLoading(false); }
   };
 
@@ -63,7 +67,10 @@ function PetDetail({ pet, onBack }) {
       });
       const json = await res.json();
       setVisitTypes(json.visitTypes || json.data || []);
-    } catch (e) { console.log(e); }
+    } catch (e) {
+      if (__DEV__) console.log(e);
+      Alert.alert("Error", "Could not load the visit types.");
+    }
   };
 
   const submitVisit = async () => {
@@ -98,7 +105,10 @@ function PetDetail({ pet, onBack }) {
       });
       const json = await res.json();
       setPrescriptions(json.prescriptions || json.data || []);
-    } catch (e) { console.log(e); }
+    } catch (e) {
+      if (__DEV__) console.log(e);
+      Alert.alert("Error", "Could not load prescriptions.");
+    }
     finally { setPrescLoading(false); }
   };
 
@@ -509,6 +519,7 @@ export default function StaffPetMaster() {
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
 
@@ -521,7 +532,11 @@ export default function StaffPetMaster() {
       });
       const json = await res.json();
       setPetList(json.pets || json.list || []);
-    } catch (e) { console.log(e); }
+      setLoadError(false);
+    } catch (e) {
+      if (__DEV__) console.log(e);
+      setLoadError(true);
+    }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 
@@ -547,7 +562,11 @@ export default function StaffPetMaster() {
       });
       const json = await res.json();
       if (json.success) setSelectedPet(json.pet);
-    } catch (e) { console.log(e); }
+      else Alert.alert("Error", json.message || "Could not open this pet.");
+    } catch (e) {
+      if (__DEV__) console.log(e);
+      Alert.alert("Error", "Could not open this pet. Check your connection.");
+    }
     finally { setDetailLoading(false); }
   };
 
@@ -618,6 +637,11 @@ export default function StaffPetMaster() {
 
       {loading ? (
         <ActivityIndicator size="large" color="#0B3D2E" style={{ flex: 1 }} />
+      ) : loadError ? (
+        <ErrorState
+          message="Could not load the pet list. Check your connection."
+          onRetry={() => { setLoading(true); setLoadError(false); search(name, phone); }}
+        />
       ) : (
         <ScrollView
           showsVerticalScrollIndicator={false}

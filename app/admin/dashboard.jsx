@@ -9,6 +9,7 @@ import { useRouter } from "expo-router";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
 import { registerCacheReset } from "../../utils/sessionCache";
+import { ErrorState } from "../../components/ScreenState";
 
 // Pad to a full six-row grid so the calendar keeps one height all year — an
 // unpadded month renders four, five or six rows and the dialog jumps about.
@@ -65,6 +66,7 @@ export default function AdminDashboard() {
   const [recentVisits, setRecentVisits]     = useState(_cachedVisits);
   const [loading, setLoading]               = useState(!_loaded);
   const [refreshing, setRefreshing]         = useState(false);
+  const [loadError, setLoadError]           = useState(false);
   const [unreadCount, setUnreadCount]       = useState(_cachedUnread);
   const [token, setToken]                   = useState(_cachedToken);
   const [calModal, setCalModal]             = useState(false);
@@ -112,9 +114,13 @@ export default function AdminDashboard() {
         const newStats2 = { ..._cachedStats, totalVisits: visitData.total || 0 };
         setStats(newStats2); _cachedStats = newStats2;
       }
+      setLoadError(false);
       _cachedUser = u; _cachedToken = t || "";
       _loaded = true;
-    } catch (e) { if (__DEV__) console.log(e); }
+    } catch (e) {
+      if (__DEV__) console.log(e);
+      setLoadError(true);
+    }
     finally { setLoading(false); setRefreshing(false); isFetching.current = false; }
   }, []);
 
@@ -197,6 +203,11 @@ export default function AdminDashboard() {
 
       {loading ? (
         <ActivityIndicator size="large" color="#0B3D2E" style={{ flex: 1 }} />
+      ) : loadError && !stats.total && !stats.totalVisits ? (
+        <ErrorState
+          message="Could not load the dashboard. Check your connection."
+          onRetry={() => { setLoading(true); setLoadError(false); load(true); }}
+        />
       ) : (
         <ScrollView
           showsVerticalScrollIndicator={false}

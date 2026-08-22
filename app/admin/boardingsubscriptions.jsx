@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity,
+  View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl,
   Alert, ActivityIndicator, TextInput, Modal, StatusBar,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
@@ -23,6 +23,7 @@ export default function AdminBoardingSubscriptions() {
   const [adminNote, setAdminNote] = useState("");
   const [processing, setProcessing] = useState(false);
   const [showFilterModal, setShowFilterModal] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async (status = filter) => {
     const { token: t } = await getAuth();
@@ -40,6 +41,7 @@ export default function AdminBoardingSubscriptions() {
       setLoadError(true);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [filter]);
 
@@ -133,7 +135,17 @@ export default function AdminBoardingSubscriptions() {
           onRetry={() => { setLoadError(false); setLoading(true); load(); }}
         />
       ) : (
-        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => { setRefreshing(true); load(filter); }}
+              tintColor="#0B3D2E"
+            />
+          }
+        >
           {bookings.length === 0 ? (
             <View style={styles.emptyBox}>
               <Text style={styles.emptyEmoji}>📭</Text>
