@@ -11,7 +11,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.doggosheaven.app",
-      "buildNumber": "5",
+      "buildNumber": "6",
       "icon": "./assets/images/icon-ios.png",
       "infoPlist": {
         "NSCameraUsageDescription": "Allow Doggos Heaven to use your camera to take pet photos.",
@@ -22,7 +22,7 @@
     },
     "android": {
       "package": "com.doggosheaven.app",
-      "versionCode": 16,
+      "versionCode": 17,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#0B3D2E"
