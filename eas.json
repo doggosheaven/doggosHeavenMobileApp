@@ -46,7 +46,8 @@
         "appleId": "shubh4592@icloud.com",
         "appleTeamId": "2X2ST5K3T5",
         "language": "en-US",
-        "companyName": "Doggos Heaven"
+        "companyName": "Doggos Heaven",
+        "ascAppId": "6764565921"
       },
       "android": {
         "serviceAccountKeyPath": "./play-service-account.json",
@@ -57,7 +58,8 @@
     "preview": {
       "ios": {
         "appleId": "shubh4592@icloud.com",
-        "appleTeamId": "2X2ST5K3T5"
+        "appleTeamId": "2X2ST5K3T5",
+        "ascAppId": "6764565921"
       },
       "android": {
         "serviceAccountKeyPath": "./play-service-account.json",
