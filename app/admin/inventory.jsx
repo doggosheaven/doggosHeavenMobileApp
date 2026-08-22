@@ -9,6 +9,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
+import { ErrorState } from "../../components/ScreenState";
 import { registerCacheReset } from "../../utils/sessionCache";
 
 const TABS = ["All Items", "Alert List"];
@@ -35,6 +36,7 @@ export default function StaffInventory() {
   const [alertList, setAlertList] = useState(_cachedAlertList || []);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(!_cachedInventory);
+  const [loadError, setLoadError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [token, setToken] = useState(_cachedInvToken);
 
@@ -57,7 +59,7 @@ export default function StaffInventory() {
       const alertJson = await alertRes.json();
       if (invJson.success) setInventory(invJson.items || []);
       if (alertJson.success) setAlertList(alertJson.items || alertJson.alertList || []);
-    } catch (e) { console.log(e); }
+    } catch (e) { if (__DEV__) console.log(e); setLoadError(true); }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 
@@ -208,6 +210,11 @@ export default function StaffInventory() {
 
       {loading ? (
         <ActivityIndicator size="large" color="#0B3D2E" style={{ flex: 1 }} />
+      ) : loadError ? (
+        <ErrorState
+          message="Could not load this. Check your connection."
+          onRetry={() => { setLoadError(false); setLoading(true); loadInventory(); }}
+        />
       ) : (
         <ScrollView
           showsVerticalScrollIndicator={false}

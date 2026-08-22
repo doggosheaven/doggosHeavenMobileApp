@@ -8,6 +8,7 @@ import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
+import { ErrorState } from "../../components/ScreenState";
 
 const STATUS_COLOR = { pending: "#F59E0B", confirmed: "#3E7B27", completed: "#0B3D2E", cancelled: "#C62828" };
 const STATUS_BG    = { pending: "#FFF9E6", confirmed: "#E8F5E8", completed: "#E8F5E8", cancelled: "#FFEBEE" };
@@ -64,6 +65,7 @@ export default function AdminNotifications() {
   const router = useRouter();
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [token, setToken] = useState("");
   const [bookingModal, setBookingModal] = useState(null);
@@ -78,7 +80,7 @@ export default function AdminNotifications() {
       });
       const json = await res.json();
       if (json.success) setAlerts(json.alerts || []);
-    } catch (e) { console.log(e); }
+    } catch (e) { if (__DEV__) console.log(e); setLoadError(true); }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 
@@ -170,6 +172,11 @@ export default function AdminNotifications() {
 
       {loading ? (
         <ActivityIndicator size="large" color="#0B3D2E" style={{ flex: 1 }} />
+      ) : loadError ? (
+        <ErrorState
+          message="Could not load this. Check your connection."
+          onRetry={() => { setLoadError(false); setLoading(true); load(); }}
+        />
       ) : (
         <ScrollView
           showsVerticalScrollIndicator={false}

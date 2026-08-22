@@ -9,6 +9,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
+import { ErrorState } from "../../components/ScreenState";
 
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const DAY_NAMES   = ["Su","Mo","Tu","We","Th","Fr","Sa"];
@@ -112,6 +113,7 @@ export default function AdminStaff() {
   const router = useRouter();
   const [staffList, setStaffList] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [token, setToken] = useState("");
 
@@ -139,7 +141,7 @@ export default function AdminStaff() {
       });
       const data = await res.json();
       if (data.success) setStaffList(data.staff || []);
-    } catch (e) { console.log(e); }
+    } catch (e) { if (__DEV__) console.log(e); setLoadError(true); }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 
@@ -276,6 +278,11 @@ Their login is disabled immediately. Past visits, bills and prescriptions stay o
 
       {loading ? (
         <ActivityIndicator size="large" color="#0B3D2E" style={{ flex: 1 }} />
+      ) : loadError ? (
+        <ErrorState
+          message="Could not load this. Check your connection."
+          onRetry={() => { setLoadError(false); setLoading(true); loadStaff(); }}
+        />
       ) : (
         <ScrollView
           showsVerticalScrollIndicator={false}

@@ -8,6 +8,7 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
+import { ErrorState } from "../../components/ScreenState";
 
 const STATUS_FILTERS = ["all", "pending", "active", "inactive", "rejected"];
 
@@ -15,6 +16,7 @@ export default function AdminBoardingSubscriptions() {
   const router = useRouter();
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [filter, setFilter] = useState("pending");
   const [token, setToken] = useState(null);
   const [actionModal, setActionModal] = useState(null); // { booking, action }
@@ -32,8 +34,10 @@ export default function AdminBoardingSubscriptions() {
       });
       const data = await res.json();
       if (data.success) setBookings(data.bookings || []);
+      else setLoadError(true);
     } catch (e) {
-      console.log(e);
+      if (__DEV__) console.log(e);
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -123,6 +127,11 @@ export default function AdminBoardingSubscriptions() {
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator size="large" color="#0B3D2E" /></View>
+      ) : loadError ? (
+        <ErrorState
+          message="Could not load this. Check your connection."
+          onRetry={() => { setLoadError(false); setLoading(true); load(); }}
+        />
       ) : (
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           {bookings.length === 0 ? (

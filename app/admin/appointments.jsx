@@ -10,9 +10,15 @@ import { WebView } from "react-native-webview";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
+import { ErrorState } from "../../components/ScreenState";
 import { registerCacheReset } from "../../utils/sessionCache";
 import { buildInvoiceHTML, downloadInvoicePDF } from "../../utils/invoiceGenerator";
 import CalendarModal from "../../components/CalendarModal";
+
+const toISODate = (d) => {
+  const x = new Date(d);
+  return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
+};
 
 const FILTERS = ["All", "Pending", "Confirmed", "Completed", "Cancelled"];
 const STATUS_COLOR = { pending: "#F59E0B", confirmed: "#3E7B27", completed: "#0B3D2E", cancelled: "#C62828" };
@@ -51,8 +57,13 @@ export default function AdminAppointments() {
   const [appointments, setAppointments] = useState(_cachedAppts || []);
   const [filter, setFilter] = useState(paramFilter || "All");
   const [selectedDate, setSelectedDate] = useState(null);
+  const [page, setPage] = useState(1);
+  const [pages, setPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [showCal, setShowCal] = useState(false);
   const [loading, setLoading] = useState(!_cachedAppts);
+  const [loadError, setLoadError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [actionId, setActionId] = useState(null);
   const [token, setToken] = useState(_cachedApptToken);
@@ -104,20 +115,55 @@ export default function AdminAppointments() {
     finally { setPayHistoryLoading(false); }
   };
 
-  const loadAppointments = useCallback(async (force = false) => {
-    if (!force && _cachedAppts) { setAppointments(_cachedAppts); setLoading(false); return; }
+  const PAGE_SIZE = 40;
+
+  const buildQuery = useCallback((wanted) => {
+    const q = new URLSearchParams({ page: String(wanted), limit: String(PAGE_SIZE) });
+    if (filter && filter !== "All") q.set("status", filter.toLowerCase());
+    if (selectedDate) q.set("date", toISODate(selectedDate));
+    return q;
+  }, [filter, selectedDate]);
+
+  const loadAppointments = useCallback(async () => {
     try {
       const { token: t } = await getAuth();
       setToken(t || ""); _cachedApptToken = t || "";
-      const res = await fetch(`${BASE_URL}/api/v1/customerappointment/getallappoint`, {
-        headers: { Authorization: t || "" },
-      });
+      const res = await fetch(
+        `${BASE_URL}/api/v1/customerappointment/getallappoint?${buildQuery(1)}`,
+        { headers: { Authorization: t || "" } }
+      );
       const data = await res.json();
-      if (data.success) { setAppointments(data.data || []); _cachedAppts = data.data || []; }
-    } catch (e) { console.log(e); }
+      if (data.success) {
+        setAppointments(data.data || []);
+        _cachedAppts = data.data || [];
+        setTotal(data.total || 0);
+        setPages(data.pages || 1);
+        setPage(1);
+        setLoadError(false);
+      } else setLoadError(true);
+    } catch (e) { if (__DEV__) console.log(e); setLoadError(true); }
     finally { setLoading(false); setRefreshing(false); }
-  }, []);
+  }, [buildQuery]);
 
+  const loadMore = useCallback(async () => {
+    if (loadingMore || page >= pages) return;
+    setLoadingMore(true);
+    try {
+      const res = await fetch(
+        `${BASE_URL}/api/v1/customerappointment/getallappoint?${buildQuery(page + 1)}`,
+        { headers: { Authorization: token || "" } }
+      );
+      const data = await res.json();
+      if (data.success) {
+        setAppointments((prev) => [...prev, ...(data.data || [])]);
+        setPage(page + 1);
+        setPages(data.pages || pages);
+      }
+    } catch (e) { if (__DEV__) console.log(e); }
+    finally { setLoadingMore(false); }
+  }, [buildQuery, loadingMore, page, pages, token]);
+
+  // Both filters live on the server now, so changing one refetches from page one.
   useFocusEffect(useCallback(() => { loadAppointments(); }, [loadAppointments]));
 
   const handleConfirm = async (id) => {
@@ -203,11 +249,8 @@ export default function AdminAppointments() {
   const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "";
   const isToday = selectedDate && isSameDay(selectedDate, new Date());
 
-  const filtered = appointments.filter(a => {
-    const statusMatch = filter === "All" || a.status === filter.toLowerCase();
-    const dateMatch   = !selectedDate || isSameDay(new Date(a.appointmentDate), selectedDate);
-    return statusMatch && dateMatch;
-  });
+  // The server applies both filters, so this is the list as-is.
+  const filtered = appointments;
   const formatDate = (d) => new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 
   return (
@@ -290,6 +333,11 @@ export default function AdminAppointments() {
 
       {loading ? (
         <ActivityIndicator size="large" color="#0B3D2E" style={{ flex: 1 }} />
+      ) : loadError ? (
+        <ErrorState
+          message="Could not load this. Check your connection."
+          onRetry={() => { setLoadError(false); setLoading(true); loadAppointments(); }}
+        />
       ) : (
         <ScrollView
           showsVerticalScrollIndicator={false}
@@ -434,6 +482,28 @@ export default function AdminAppointments() {
                 )}
               </TouchableOpacity>
             ))
+          )}
+
+          {filtered.length > 0 && (
+            page < pages ? (
+              <TouchableOpacity
+                style={styles.moreBtn}
+                onPress={loadMore}
+                disabled={loadingMore}
+                activeOpacity={0.85}
+              >
+                {loadingMore ? (
+                  <ActivityIndicator size="small" color="#0B3D2E" />
+                ) : (
+                  <>
+                    <Ionicons name="chevron-down" size={16} color="#0B3D2E" />
+                    <Text style={styles.moreTxt}>Load more ({filtered.length} of {total})</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            ) : (
+              <Text style={styles.allShown}>All {total} shown</Text>
+            )
           )}
         </ScrollView>
       )}
@@ -928,6 +998,16 @@ const styles = StyleSheet.create({
   },
   invoiceBtnText: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#3E7B27" },
 
+  moreBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    backgroundColor: "#fff", borderRadius: 12, paddingVertical: 13, marginTop: 4,
+    borderWidth: 1, borderColor: "#D4EDD4",
+  },
+  moreTxt: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+  allShown: {
+    textAlign: "center", marginTop: 10,
+    fontSize: 12, fontFamily: "Inter_400Regular", color: "#8A9A8A",
+  },
   emptyBox: { alignItems: "center", paddingVertical: 60 },
   emptyText: { fontSize: 16, fontFamily: "Poppins_700Bold", color: "#0B3D2E", marginTop: 12 },
 

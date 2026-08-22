@@ -9,6 +9,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
+import { ErrorState } from "../../components/ScreenState";
 
 const EMOJI_OPTIONS = [
   "✂️", "🏠", "🎓", "🌞", "🎮", "🩺", "🌳", "🛁", "💆", "💳",
@@ -39,6 +40,7 @@ export default function AdminServices() {
   const router = useRouter();
   const [services, setServices] = useState(FALLBACK_SERVICES);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [token, setToken] = useState("");
   const [modalVisible, setModalVisible] = useState(false);
@@ -56,7 +58,7 @@ export default function AdminServices() {
       });
       const data = await res.json();
       if (data.success && data.visitTypes.length > 0) setServices(data.visitTypes);
-    } catch (e) { console.log(e); }
+    } catch (e) { if (__DEV__) console.log(e); setLoadError(true); }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 
@@ -146,6 +148,11 @@ export default function AdminServices() {
 
       {loading ? (
         <ActivityIndicator size="large" color="#0B3D2E" style={{ flex: 1 }} />
+      ) : loadError ? (
+        <ErrorState
+          message="Could not load this. Check your connection."
+          onRetry={() => { setLoadError(false); setLoading(true); loadServices(); }}
+        />
       ) : (
         <ScrollView
           showsVerticalScrollIndicator={false}
