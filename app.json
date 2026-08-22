@@ -4,7 +4,7 @@
     "slug": "doggosheaven",
     "version": "1.0.4",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/icon-square.png",
     "scheme": "doggosheaven",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -24,7 +24,7 @@
       "package": "com.doggosheaven.app",
       "versionCode": 15,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/doggoswhite.png",
+        "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#0B3D2E"
       },
       "edgeToEdgeEnabled": true,
@@ -78,7 +78,9 @@
         {
           "iosUrlScheme": "com.googleusercontent.apps.588004109708-0tjpf3kmuqes4si3vnodu5jp11gf3ubm"
         }
-      ]
+      ],
+      "expo-font",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,

@@ -10,8 +10,6 @@ import { useRouter } from "expo-router";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
 
-const RZP_KEY = process.env.EXPO_PUBLIC_RAZORPAY_KEY;
-
 const PAYMENT_METHODS = ["Cash", "Card", "UPI"];
 
 const emptyForm = () => ({
@@ -39,7 +37,7 @@ export default function BillingScreen({ basePath, closeIconSize = 22, headerGap 
   const [visitTypes, setVisitTypes] = useState([]);
   const [showServicePicker, setShowServicePicker] = useState(false);
   const [pickerIndex, setPickerIndex] = useState(null);
-  const [rzpModal, setRzpModal] = useState(null); // { orderId, method, upiId }
+  const [rzpModal, setRzpModal] = useState(null); // { orderId, method, upiId, key }
 
   useEffect(() => {
     getAuth().then(({ token }) => {
@@ -145,6 +143,7 @@ export default function BillingScreen({ basePath, closeIconSize = 22, headerGap 
       setGenerating(false);
       setRzpModal({
         orderId: orderData.order.id,
+        key: orderData.key,
         method: form.paymentMethod,
         upiId: upiIdOverride || form.upiId || "",
       });
@@ -186,7 +185,7 @@ export default function BillingScreen({ basePath, closeIconSize = 22, headerGap 
     } catch (_) {}
   };
 
-  const buildRzpHtml = (orderId, method, upiId) => {
+  const buildRzpHtml = (orderId, method, upiId, rzpKey) => {
     const prefillObj = {
       name: form.customerName || "",
       contact: form.phone || "9999999999",
@@ -194,7 +193,7 @@ export default function BillingScreen({ basePath, closeIconSize = 22, headerGap 
     if (method === "UPI" && upiId) prefillObj.vpa = upiId;
 
     const optsObj = {
-      key: RZP_KEY,
+      key: rzpKey,
       order_id: orderId,
       amount: total * 100,
       currency: "INR",
@@ -510,7 +509,7 @@ export default function BillingScreen({ basePath, closeIconSize = 22, headerGap 
           </TouchableOpacity>
           {rzpModal && (
             <WebView
-              source={{ html: buildRzpHtml(rzpModal.orderId, rzpModal.method, rzpModal.upiId) }}
+              source={{ html: buildRzpHtml(rzpModal.orderId, rzpModal.method, rzpModal.upiId, rzpModal.key) }}
               onMessage={onRzpMessage}
               javaScriptEnabled={true}
               domStorageEnabled={true}
