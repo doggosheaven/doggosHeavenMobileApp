@@ -42,3 +42,6 @@ app-example
 # generated native folders
 /ios
 /android
+
+# Play Console service account used by `eas submit` — a credential, keep it local
+play-service-account.json
