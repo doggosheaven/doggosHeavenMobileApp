@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
-import { getAuth } from "../utils/authStorage";
+import { refreshSession } from "../utils/authStorage";
 
 const homeFor = (role) => {
   if (role === "superadmin") return "/superadmin/dashboard";
@@ -21,7 +21,7 @@ export default function RoleGate({ allow, children }) {
 
   useEffect(() => {
     let active = true;
-    getAuth()
+    refreshSession()
       .then(({ token, user }) => {
         if (!active) return;
         if (!token || !user) return router.replace("/auth/login");

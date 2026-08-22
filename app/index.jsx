@@ -4,7 +4,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { getAuth } from "../utils/authStorage";
+import { refreshSession } from "../utils/authStorage";
 import { StatusBar } from "expo-status-bar";
 
 const { width, height } = Dimensions.get("window");
@@ -20,7 +20,7 @@ export default function WelcomeScreen() {
   const btnAnim    = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    getAuth().then(({ token, user }) => {
+    refreshSession().then(({ token, user }) => {
       if (token) {
         if (user?.role === "superadmin") router.replace("/superadmin/dashboard");
         else if (user?.role === "admin")  router.replace("/admin/dashboard");
