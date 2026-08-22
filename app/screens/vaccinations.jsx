@@ -158,7 +158,7 @@ export default function Vaccinations() {
                     key={`${v.petId}-${v.name}-${i}`}
                     style={[s.card, { borderLeftColor: meta.tint }]}
                     activeOpacity={0.85}
-                    onPress={() => router.push({ pathname: "/screens/editpet", params: { id: v.petId } })}
+                    onPress={() => router.push({ pathname: "/screens/editpet", params: { petId: v.petId } })}
                   >
                     <View style={s.cardTop}>
                       {v.petImage ? (

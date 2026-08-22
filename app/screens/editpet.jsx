@@ -9,6 +9,7 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import Header from "../../components/Header";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
+import { useApp } from "../../context/AppContext";
 
 const DOG_BREEDS = [
   "Labrador Retriever", "German Shepherd", "Golden Retriever", "Shih Tzu",
@@ -108,8 +109,18 @@ const ToggleGroup = ({ options, value, onChange }) => (
 
 export default function EditPetScreen() {
   const router = useRouter();
-  const { pet: petParam } = useLocalSearchParams();
-  const petData = JSON.parse(petParam || "{}");
+  const { pet: petParam, petId } = useLocalSearchParams();
+  const { pets } = useApp();
+
+  // Callers either hand over the whole pet (My Pets) or just its id (the
+  // vaccination list). With only an id, look it up in the pets already loaded.
+  const petData = (() => {
+    if (petParam) {
+      try { return JSON.parse(petParam); } catch { /* fall through */ }
+    }
+    if (petId) return (pets || []).find((p) => String(p._id) === String(petId)) || {};
+    return {};
+  })();
 
   const dobFormatted = fmtDate(petData.dob);
   const [dd, mm, yyyy] = dobFormatted ? dobFormatted.split("/") : ["", "", ""];
