@@ -1,7 +1,7 @@
 import { useState } from "react";
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  Alert, ActivityIndicator,
+  Alert, ActivityIndicator, TextInput, Modal,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -9,6 +9,18 @@ import { useApp } from "../../context/AppContext";
 import { BASE_URL } from "../../constants/api";
 import { initiatePayment } from "../../utils/paymentHelper";
 import { downloadInvoicePDF } from "../../utils/invoiceGenerator";
+import CalendarModal from "../../components/CalendarModal";
+
+// Same 10am-9pm hourly grid the booking form offers. The API stores HH:MM;
+// the label is only for display.
+const TIME_SLOTS = [];
+for (let h = 10; h <= 21; h++) {
+  const display = h <= 12 ? h : h - 12;
+  TIME_SLOTS.push({
+    value: `${String(h).padStart(2, "0")}:00`,
+    label: `${display}:00 ${h < 12 ? "AM" : "PM"}`,
+  });
+}
 
 const STATUS_CONFIG = {
   pending:   { label: "Pending",   bg: "#FFF9E6", color: "#B8860B", icon: "⏳", desc: "Waiting for confirmation from Doggos Heaven team." },
@@ -24,6 +36,12 @@ export default function BookingDetailScreen() {
 
   const appt = appointments.find((a) => a._id === params.id);
   const [downloading, setDownloading] = useState(false);
+  const [showCal, setShowCal] = useState(false);
+  const [newDate, setNewDate] = useState(null);
+  const [rescheduling, setRescheduling] = useState(false);
+  const [rating, setRating] = useState(appt?.rating || 0);
+  const [review, setReview] = useState(appt?.review || "");
+  const [savingRating, setSavingRating] = useState(false);
 
   if (!appt) {
     return (
@@ -58,6 +76,68 @@ export default function BookingDetailScreen() {
 
   const handlePayNow = () => {
     initiatePayment({ serviceName: appt.serviceName });
+  };
+
+  // Moving a booking keeps it and its payment state, instead of forcing a
+  // cancel-and-rebook.
+  const submitReschedule = async (time) => {
+    setRescheduling(true);
+    try {
+      const res = await fetch(`${BASE_URL}/api/v1/customerappointment/reschedule/${appt._id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: token || "" },
+        body: JSON.stringify({
+          appointmentDate: newDate.toISOString(),
+          appointmentTime: time,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAppointments((prev) =>
+          prev.map((a) => (a._id === appt._id ? { ...a, appointmentDate: newDate, appointmentTime: time } : a))
+        );
+        setNewDate(null);
+        Alert.alert("Rescheduled ✅", "Your booking has been moved.");
+        loadAppointments(true);
+      } else Alert.alert("Could not reschedule", data.message || "Please try another slot.");
+    } catch {
+      Alert.alert("Error", "Network error. Please try again.");
+    } finally { setRescheduling(false); }
+  };
+
+  const submitRating = async (stars) => {
+    setRating(stars);
+    setSavingRating(true);
+    try {
+      const res = await fetch(`${BASE_URL}/api/v1/customerappointment/rate/${appt._id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: token || "" },
+        body: JSON.stringify({ rating: stars, review }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAppointments((prev) =>
+          prev.map((a) => (a._id === appt._id ? { ...a, rating: stars, review } : a))
+        );
+      } else Alert.alert("Could not save", data.message || "Please try again.");
+    } catch {
+      Alert.alert("Error", "Network error. Please try again.");
+    } finally { setSavingRating(false); }
+  };
+
+  // Prefill a fresh booking from this one.
+  const bookAgain = () => {
+    router.push({
+      pathname: "/screens/bookingform",
+      params: {
+        serviceId: appt.serviceId?._id || appt.serviceId || "",
+        serviceName: appt.serviceName || "",
+        servicePrice: String(appt.totalAmount || 0),
+        repeatPetName: appt.petName || "",
+        repeatPetBreed: appt.petBreed || "",
+        repeatPetAge: appt.petAge || "",
+      },
+    });
   };
 
   const handleCancel = () => {
@@ -254,6 +334,59 @@ export default function BookingDetailScreen() {
           </View>
         )}
 
+        {/* Rate a completed booking */}
+        {appt.status === "completed" && (
+          <View style={styles.rateCard}>
+            <Text style={styles.rateTitle}>
+              {appt.rating ? "Your rating" : "How was it?"}
+            </Text>
+            <View style={styles.starRow}>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <TouchableOpacity
+                  key={n}
+                  onPress={() => submitRating(n)}
+                  disabled={savingRating}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name={n <= rating ? "star" : "star-outline"}
+                    size={30}
+                    color={n <= rating ? "#F5B301" : "#C9D6C9"}
+                  />
+                </TouchableOpacity>
+              ))}
+              {savingRating && <ActivityIndicator size="small" color="#0B3D2E" style={{ marginLeft: 8 }} />}
+            </View>
+            <TextInput
+              style={styles.reviewInput}
+              placeholder="Tell us more (optional)"
+              placeholderTextColor="#8A9A8A"
+              value={review}
+              onChangeText={setReview}
+              multiline
+              maxLength={500}
+              onBlur={() => rating > 0 && submitRating(rating)}
+            />
+          </View>
+        )}
+
+        {/* Book the same thing again */}
+        {(appt.status === "completed" || appt.status === "cancelled") && (
+          <TouchableOpacity style={styles.againBtn} onPress={bookAgain} activeOpacity={0.85}>
+            <Ionicons name="repeat-outline" size={18} color="#0B3D2E" />
+            <Text style={styles.againBtnTxt}>Book again</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Reschedule */}
+        {(appt.status === "pending" || appt.status === "confirmed") && (
+          <TouchableOpacity style={styles.rescheduleBtn} onPress={() => setShowCal(true)} activeOpacity={0.85}>
+            <Ionicons name="calendar-outline" size={18} color="#0B3D2E" />
+            <Text style={styles.rescheduleBtnTxt}>Reschedule</Text>
+          </TouchableOpacity>
+        )}
+
         {/* Cancel */}
         {(appt.status === "pending" || appt.status === "confirmed") && (
           <TouchableOpacity style={styles.cancelBtn} onPress={handleCancel} activeOpacity={0.8}>
@@ -269,6 +402,49 @@ export default function BookingDetailScreen() {
         </Text>
 
       </ScrollView>
+
+      <CalendarModal
+        visible={showCal}
+        selectedDate={newDate || new Date(appt.appointmentDate)}
+        onClose={() => setShowCal(false)}
+        onSelect={(d) => setNewDate(d)}
+      />
+
+      <Modal visible={!!newDate} transparent animationType="slide" onRequestClose={() => setNewDate(null)}>
+        <View style={styles.slotOverlay}>
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setNewDate(null)} />
+          <View style={styles.slotSheet}>
+            <View style={styles.slotHead}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.slotTitle}>Pick a time</Text>
+                <Text style={styles.slotSub}>
+                  {newDate?.toLocaleDateString("en-IN", { weekday: "long", day: "2-digit", month: "short" })}
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setNewDate(null)}>
+                <Ionicons name="close" size={22} color="#0B3D2E" />
+              </TouchableOpacity>
+            </View>
+            {rescheduling ? (
+              <ActivityIndicator size="large" color="#0B3D2E" style={{ paddingVertical: 26 }} />
+            ) : (
+              <View style={styles.slotGrid}>
+                {TIME_SLOTS.map((t) => (
+                  <TouchableOpacity
+                    key={t.value}
+                    style={[styles.slot, t.value === appt.appointmentTime && styles.slotCurrent]}
+                    onPress={() => submitReschedule(t.value)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.slotTxt}>{t.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+            <View style={{ height: 16 }} />
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -298,6 +474,50 @@ const rowStyles = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
+  rateCard: {
+    backgroundColor: "#fff", borderRadius: 14, padding: 16,
+    marginHorizontal: 16, marginTop: 12,
+    borderWidth: 1, borderColor: "#D4EDD4",
+  },
+  rateTitle: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+  starRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10 },
+  reviewInput: {
+    marginTop: 12, minHeight: 64, textAlignVertical: "top",
+    backgroundColor: "#F0F7F0", borderRadius: 10, padding: 10,
+    fontSize: 13, fontFamily: "Inter_400Regular", color: "#1A1A1A",
+    borderWidth: 1, borderColor: "#D4EDD4",
+  },
+
+  againBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    backgroundColor: "#E8F5E8", borderRadius: 14, paddingVertical: 14,
+    marginHorizontal: 16, marginTop: 12,
+    borderWidth: 1, borderColor: "#A8D96C",
+  },
+  againBtnTxt: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+
+  rescheduleBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    backgroundColor: "#fff", borderRadius: 14, paddingVertical: 14,
+    marginHorizontal: 16, marginTop: 12,
+    borderWidth: 1.5, borderColor: "#0B3D2E",
+  },
+  rescheduleBtnTxt: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+
+  slotOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" },
+  slotSheet: {
+    backgroundColor: "#F0F7F0", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20,
+  },
+  slotHead: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 14 },
+  slotTitle: { fontSize: 17, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
+  slotSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#8A9A8A", marginTop: 1 },
+  slotGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  slot: {
+    backgroundColor: "#fff", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11,
+    borderWidth: 1, borderColor: "#D4EDD4",
+  },
+  slotCurrent: { borderColor: "#A8D96C", backgroundColor: "#E8F5E8" },
+  slotTxt: { fontSize: 13, fontFamily: "Poppins_700Bold", color: "#0B3D2E" },
   invoiceBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
     backgroundColor: "#0B3D2E", borderRadius: 14, paddingVertical: 14,

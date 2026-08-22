@@ -40,6 +40,7 @@ export default function BookingFormScreen() {
     serviceId, serviceName, serviceEmoji,
     servicePrice, serviceHalfPrice, serviceConsultPrice,
     serviceDescription, servicePriceTiers,
+    repeatPetName,
   } = useLocalSearchParams();
 
   const priceOptions = useMemo(() => {
@@ -178,7 +179,15 @@ export default function BookingFormScreen() {
         { headers: { Authorization: t || "" } }
       );
       const data = await res.json();
-      if (data.success) setPets((data.pets || []).filter((p) => !p.isBlacklisted));
+      if (data.success) {
+        const list = (data.pets || []).filter((p) => !p.isBlacklisted);
+        setPets(list);
+        // Arriving from "Book again" — preselect the pet that booking was for.
+        if (repeatPetName) {
+          const match = list.find((p) => p.name === repeatPetName);
+          if (match) setSelectedPet(match);
+        }
+      }
     } catch (e) { __DEV__ && console.log(e); }
     finally { setPetsLoading(false); }
   };
