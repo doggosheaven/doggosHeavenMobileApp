@@ -1,6 +1,7 @@
 {
   "cli": {
-    "version": ">= 12.0.0"
+    "version": ">= 12.0.0",
+    "appVersionSource": "local"
   },
   "build": {
     "development": {
@@ -23,7 +24,8 @@
         "EXPO_PUBLIC_BACKEND_URL": "https://api.doggosheaven.com",
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "588004109708-us9nvd4gifd90mtnadsvr5dour3ds7sp.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "588004109708-0tjpf3kmuqes4si3vnodu5jp11gf3ubm.apps.googleusercontent.com"
-      }
+      },
+      "autoIncrement": true
     },
     "production": {
       "android": {
@@ -34,7 +36,8 @@
         "EXPO_PUBLIC_BACKEND_URL": "https://api.doggosheaven.com",
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "588004109708-us9nvd4gifd90mtnadsvr5dour3ds7sp.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "588004109708-0tjpf3kmuqes4si3vnodu5jp11gf3ubm.apps.googleusercontent.com"
-      }
+      },
+      "autoIncrement": true
     }
   },
   "submit": {
