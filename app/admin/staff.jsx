@@ -172,7 +172,7 @@ export default function AdminStaff() {
         });
         setHistoryTab("visits");
       }
-    } catch (e) { console.log(e); }
+    } catch (e) { __DEV__ && console.log(e); }
     finally { setDetailLoading(false); }
   };
 
@@ -187,7 +187,7 @@ export default function AdminStaff() {
       const res = await fetch(url, { headers: { Authorization: t || '' } });
       const data = await res.json();
       if (data.success) setRevenueData(data);
-    } catch (e) { console.log(e); }
+    } catch (e) { __DEV__ && console.log(e); }
     finally { setRevenueLoading(false); }
   };
 

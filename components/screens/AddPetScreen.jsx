@@ -199,7 +199,7 @@ export default function AddPetScreen({ backIcon = "arrow-back", centerTitle = fa
           updatePet(pi, "photo", result.assets[0].uri);
       }
     } catch (e) {
-      console.log("Photo error:", e);
+      __DEV__ && console.log("Photo error:", e);
       Alert.alert("Error", "Could not open camera/gallery.");
     }
   };
@@ -291,7 +291,7 @@ export default function AddPetScreen({ backIcon = "arrow-back", centerTitle = fa
           { text: "OK", onPress: () => router.back() },
         ]);
       } else Alert.alert("Error", json.message || "Failed to register.");
-    } catch (e) { console.log(e); Alert.alert("Error", "Network error. Please try again."); }
+    } catch (e) { __DEV__ && console.log(e); Alert.alert("Error", "Network error. Please try again."); }
     finally { setSaving(false); }
   };
 

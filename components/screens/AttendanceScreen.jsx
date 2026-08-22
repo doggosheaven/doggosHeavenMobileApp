@@ -50,7 +50,7 @@ export default function AttendanceScreen({ backIcon = "arrow-back", showCount = 
       const map = {};
       items.forEach((item) => { map[item._id] = item.present ?? false; });
       setPresentMap(map);
-    } catch (e) { console.log(e); }
+    } catch (e) { __DEV__ && console.log(e); }
     finally { setLoading(false); setRefreshing(false); }
   }, [date]);
 

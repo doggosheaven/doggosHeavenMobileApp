@@ -145,7 +145,7 @@ function PetDetail({ pet, onBack }) {
       });
       const json = await res.json();
       setSubscriptions(json.subscriptions || json.data || []);
-    } catch (e) { console.log(e); }
+    } catch (e) { __DEV__ && console.log(e); }
     finally { setSubsLoading(false); }
   };
 

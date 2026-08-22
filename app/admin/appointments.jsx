@@ -111,7 +111,7 @@ export default function AdminAppointments() {
       });
       const data = await res.json();
       if (data.success) setPaymentHistory(data.payments || []);
-    } catch (e) { console.log("payment history error:", e); }
+    } catch (e) { __DEV__ && console.log("payment history error:", e); }
     finally { setPayHistoryLoading(false); }
   };
 

@@ -85,7 +85,7 @@ export default function TotalVisitsScreen({ basePath = "/staff" }) {
       const json = await res.json();
       if (json.success) setVisits(json.List || []);
       else setVisits([]);
-    } catch (e) { console.log(e); setVisits([]); }
+    } catch (e) { __DEV__ && console.log(e); setVisits([]); }
     finally { setLoading(false); setRefreshing(false); }
   };
 
@@ -99,7 +99,7 @@ export default function TotalVisitsScreen({ basePath = "/staff" }) {
         setVisitTypes(json.visitTypes || []);
         if (json.visitTypes?.length) setSelectedPurpose(json.visitTypes[0].purpose);
       }
-    } catch (e) { console.log(e); }
+    } catch (e) { __DEV__ && console.log(e); }
   };
 
   useFocusEffect(useCallback(() => {
@@ -123,7 +123,7 @@ export default function TotalVisitsScreen({ basePath = "/staff" }) {
       });
       const json = await res.json();
       setAllPets(json.list || []);
-    } catch (e) { console.log(e); }
+    } catch (e) { __DEV__ && console.log(e); }
     finally { setPetsLoading(false); }
   };
 

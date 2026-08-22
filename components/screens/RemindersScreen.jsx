@@ -72,7 +72,7 @@ export default function RemindersScreen({ closeIconSize = 22, headerGap = false 
         items.forEach((i) => { map[i._id] = i.present ?? false; });
         setPresentMap(map);
       }
-    } catch (e) { console.log(e); }
+    } catch (e) { __DEV__ && console.log(e); }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 

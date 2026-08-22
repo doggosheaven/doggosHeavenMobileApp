@@ -108,7 +108,7 @@ export default function BillingScreen({ basePath, closeIconSize = 22, headerGap 
         headers: { "Content-Type": "application/json", Authorization: token || "" },
         body: JSON.stringify(data),
       });
-    } catch (e) { console.log("bill save error", e); }
+    } catch (e) { __DEV__ && console.log("bill save error", e); }
   };
 
   // ── CASH ──────────────────────────────────────────────────────────────────
@@ -359,7 +359,9 @@ export default function BillingScreen({ basePath, closeIconSize = 22, headerGap 
           {/* Total */}
           <View style={s.totalRow}>
             <Text style={s.totalLabel}>Total Amount</Text>
-            <Text style={s.totalAmt}>₹{total.toLocaleString("en-IN")}</Text>
+            <Text style={s.totalAmt} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+              ₹{total.toLocaleString("en-IN")}
+            </Text>
           </View>
 
           {/* Payment Method */}
@@ -597,7 +599,7 @@ const s = StyleSheet.create({
     backgroundColor: "#0B3D2E", borderRadius: 12, padding: 14, marginTop: 8,
   },
   totalLabel: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
-  totalAmt: { fontSize: 22, fontFamily: "Poppins_700Bold", color: "#fff" },
+  totalAmt: { flexShrink: 1, fontSize: 22, fontFamily: "Poppins_700Bold", color: "#fff", textAlign: "right" },
 
   chipRow: { flexDirection: "row", gap: 10, marginBottom: 4 },
   chip: { paddingHorizontal: 20, paddingVertical: 9, borderRadius: 20, backgroundColor: "#fff", borderWidth: 1, borderColor: "#D4EDD4" },

@@ -41,7 +41,7 @@ export default function BillHistoryScreen({ avoidKeyboard = true }) {
     try {
       const html = await buildWalkInInvoiceHTML(bill);
       setInvoiceHtml(html);
-    } catch (e) { console.log(e); setInvoiceHtml("<html><body><p>Error loading invoice</p></body></html>"); }
+    } catch (e) { __DEV__ && console.log(e); setInvoiceHtml("<html><body><p>Error loading invoice</p></body></html>"); }
     finally { setHtmlLoading(false); }
   };
 
@@ -53,7 +53,7 @@ export default function BillHistoryScreen({ avoidKeyboard = true }) {
       });
       const data = await res.json();
       if (data.success) setBills(data.bills || []);
-    } catch (e) { console.log(e); }
+    } catch (e) { __DEV__ && console.log(e); }
     setRefreshing(false);
   }, []);
 
