@@ -9,6 +9,7 @@ import { useRouter } from "expo-router";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
 import { registerCacheReset } from "../../utils/sessionCache";
+import { ErrorState } from "../ScreenState";
 
 const fmtDate = (d) =>
   d ? new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
@@ -26,6 +27,7 @@ export default function BlacklistedScreen({ canRemove = false }) {
   const router = useRouter();
   const [pets, setPets] = useState(_cachedPets || []);
   const [loading, setLoading] = useState(!_cachedPets);
+  const [loadError, setLoadError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [token, setToken] = useState(_cachedToken);
   const [search, setSearch] = useState("");
@@ -40,8 +42,9 @@ export default function BlacklistedScreen({ canRemove = false }) {
         headers: { Authorization: t || "" },
       });
       const json = await res.json();
-      if (json.success) { setPets(json.pets || []); _cachedPets = json.pets || []; }
-    } catch { }
+      if (json.success) { setPets(json.pets || []); _cachedPets = json.pets || []; setLoadError(false); }
+      else setLoadError(true);
+    } catch { setLoadError(true); }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 
@@ -128,6 +131,11 @@ export default function BlacklistedScreen({ canRemove = false }) {
 
       {loading ? (
         <ActivityIndicator size="large" color="#C62828" style={{ flex: 1 }} />
+      ) : loadError ? (
+        <ErrorState
+          message="Could not load blacklisted pets. Check your connection."
+          onRetry={() => { setLoading(true); setLoadError(false); load(true); }}
+        />
       ) : (
         <ScrollView
           showsVerticalScrollIndicator={false}

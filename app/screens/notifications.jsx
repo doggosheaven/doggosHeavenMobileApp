@@ -91,7 +91,7 @@ export default function NotificationsScreen() {
         setReadIds(merged);
       }
     } catch (e) {
-      console.log(e);
+      __DEV__ && console.log(e);
     } finally {
       setLoading(false);
       setRefreshing(false);

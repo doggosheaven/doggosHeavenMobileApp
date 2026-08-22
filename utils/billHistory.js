@@ -8,7 +8,7 @@ export const saveBill = async (bill) => {
     const updated = [bill, ...existing];
     await AsyncStorage.setItem(KEY, JSON.stringify(updated));
   } catch (e) {
-    console.log("saveBill error:", e);
+    __DEV__ && console.log("saveBill error:", e);
   }
 };
 
@@ -27,6 +27,6 @@ export const deleteBill = async (billNo) => {
     const updated = existing.filter((b) => b.billNo !== billNo);
     await AsyncStorage.setItem(KEY, JSON.stringify(updated));
   } catch (e) {
-    console.log("deleteBill error:", e);
+    __DEV__ && console.log("deleteBill error:", e);
   }
 };

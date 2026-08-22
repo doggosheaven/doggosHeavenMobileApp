@@ -7,6 +7,7 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import Header from "../../components/Header";
 import { useApp } from "../../context/AppContext";
+import { ErrorState } from "../../components/ScreenState";
 
 const SERVICE_ICONS = {
   Grooming: "✂️", Hostel: "🏠", "Day School": "🎓",
@@ -43,7 +44,7 @@ const SERVICE_CHIPS = [
 export default function HomeScreen() {
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
-  const { user, services: ctxServices, boarding: ctxBoarding, bookings: ctxBookings, pets: ctxPets, wallet: ctxWallet, loadAuth, loadServices, loadBoarding, loadAppointments, loadPets, loadWallet } = useApp();
+  const { user, services: ctxServices, boarding: ctxBoarding, bookings: ctxBookings, pets: ctxPets, wallet: ctxWallet, loadAuth, loadServices, loadBoarding, loadAppointments, loadPets, loadWallet, errors } = useApp();
 
   const services = ctxServices.length > 0 ? ctxServices : FALLBACK_SERVICES;
   const activeBoarding = ctxBoarding?.activeBoarding || null;
@@ -92,6 +93,23 @@ export default function HomeScreen() {
   const today = new Date();
   const hour = today.getHours();
   const greeting = hour < 12 ? "Good Morning" : hour < 17 ? "Good Afternoon" : "Good Evening";
+
+  // Everything failed and there is nothing cached to show — say so rather than
+  // rendering an empty home screen that looks like the account is blank.
+  const offline =
+    errors?.services && errors?.pets && errors?.appointments && ctxServices.length === 0;
+
+  if (offline) {
+    return (
+      <View style={s.container}>
+        <Header />
+        <ErrorState
+          message="Could not reach Doggos Heaven. Check your connection and try again."
+          onRetry={onRefresh}
+        />
+      </View>
+    );
+  }
 
   return (
     <View style={s.container}>

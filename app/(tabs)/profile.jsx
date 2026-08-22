@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  Alert, ActivityIndicator, Modal, Dimensions, Image,
+  Alert, ActivityIndicator, Modal, Dimensions, Image, RefreshControl,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
@@ -15,10 +15,14 @@ export default function ProfileScreen() {
   const [showComingSoon, setShowComingSoon] = useState(false);
   const { user, pets, loadAuth, loadPets, resetCache } = useApp();
 
-  useFocusEffect(useCallback(() => {
-    loadAuth();
-    loadPets();
-  }, []));
+  const [refreshing, setRefreshing] = useState(false);
+
+  const reload = useCallback(async (force = false) => {
+    await Promise.all([loadAuth(force), loadPets(force)]);
+    setRefreshing(false);
+  }, [loadAuth, loadPets]);
+
+  useFocusEffect(useCallback(() => { reload(); }, [reload]));
 
   const handleLogout = () => {
     Alert.alert("Logout", "Are you sure you want to logout?", [
@@ -68,7 +72,13 @@ export default function ProfileScreen() {
   return (
     <View style={styles.container}>
       <Header title="Profile" />
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scroll}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); reload(true); }} tintColor="#0B3D2E" />
+        }
+      >
 
         {/* Avatar Card */}
         <View style={styles.avatarCard}>

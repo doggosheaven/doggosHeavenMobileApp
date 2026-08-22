@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity,
+  View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl,
   Alert, ActivityIndicator, StatusBar,
 } from "react-native";
 import { useRouter } from "expo-router";
@@ -31,7 +31,16 @@ export default function BoardingScreen() {
 
   const reload = async () => {
     await Promise.all([loadPets(true), loadBoarding(true)]);
+    setRefreshing(false);
   };
+
+  const refreshControl = (
+    <RefreshControl
+      refreshing={refreshing}
+      onRefresh={() => { setRefreshing(true); reload(); }}
+      tintColor="#0B3D2E"
+    />
+  );
 
   const loading = !boarding && !refreshing;
 
@@ -145,7 +154,7 @@ export default function BoardingScreen() {
             <Text style={s.walletBtnText}>Rs.{walletBalance.toFixed(0)}</Text>
           </TouchableOpacity>
         </View>
-        <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false} refreshControl={refreshControl}>
 
           {/* Active status card */}
           <View style={s.activeCard}>
@@ -261,7 +270,7 @@ export default function BoardingScreen() {
           <Text style={s.walletBtnText}>Rs.{walletBalance.toFixed(0)}</Text>
         </TouchableOpacity>
       </View>
-      <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false} refreshControl={refreshControl}>
 
         {/* Wallet balance */}
         <View style={s.walletCard}>

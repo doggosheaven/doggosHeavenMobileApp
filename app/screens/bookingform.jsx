@@ -118,7 +118,7 @@ export default function BookingFormScreen() {
       );
       const data = await res.json();
       setLocationSuggestions(data);
-    } catch (e) { console.log(e); }
+    } catch (e) { __DEV__ && console.log(e); }
     finally { setLocationSearching(false); }
   };
 
@@ -179,7 +179,7 @@ export default function BookingFormScreen() {
       );
       const data = await res.json();
       if (data.success) setPets((data.pets || []).filter((p) => !p.isBlacklisted));
-    } catch (e) { console.log(e); }
+    } catch (e) { __DEV__ && console.log(e); }
     finally { setPetsLoading(false); }
   };
 

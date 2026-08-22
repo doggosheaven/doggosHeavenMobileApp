@@ -7,6 +7,7 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import Header from "../../components/Header";
 import { useApp } from "../../context/AppContext";
+import { ErrorState } from "../../components/ScreenState";
 
 const SERVICE_EMOJIS = {
   Grooming: "✂️", Hostel: "🏠", "Day School": "🎓",
@@ -36,7 +37,7 @@ const EXCLUDED = ["Buy Subscription", "Shop", "Inquiry"];
 export default function ServicesScreen() {
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
-  const { services: ctxServices, loadServices, user } = useApp();
+  const { services: ctxServices, loadServices, user, errors } = useApp();
 
   const services = ctxServices.length > 0 ? ctxServices : FALLBACK_SERVICES;
   const loading = false;
@@ -112,6 +113,11 @@ export default function ServicesScreen() {
       <Header title="Our Services" />
       {loading ? (
         <ActivityIndicator size="large" color="#0B3D2E" style={{ flex: 1 }} />
+      ) : errors?.services && ctxServices.length === 0 ? (
+        <ErrorState
+          message="Could not load the services. Check your connection."
+          onRetry={() => loadServices(true)}
+        />
       ) : (
         <SectionList
         sections={sections}

@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect } from "react";
 import { getAuth } from "../utils/authStorage";
+import { registerCacheReset } from "../utils/sessionCache";
 import { BASE_URL } from "../constants/api";
 import * as Notifications from "expo-notifications";
 import * as Haptics from "expo-haptics";
@@ -13,6 +14,8 @@ export function StaffProvider({ children }) {
   const [alertList, setAlertList]       = useState([]);
   const [token, setToken]               = useState("");
   const [user, setUser]                 = useState(null);
+  const [errors, setErrors]             = useState({});
+  const fail = (key, yes) => setErrors((p) => (p[key] === yes ? p : { ...p, [key]: yes }));
 
   const loaded = useRef({ appointments: false, inventory: false });
   const lastApptCount = useRef(null);
@@ -80,8 +83,9 @@ export function StaffProvider({ children }) {
         headers: { Authorization: t },
       });
       const data = await res.json();
-      if (data.success) { setAppointments(data.data || []); loaded.current.appointments = true; }
-    } catch {}
+      if (data.success) { setAppointments(data.data || []); loaded.current.appointments = true; fail("appointments", false); }
+      else fail("appointments", true);
+    } catch { fail("appointments", true); }
   }, [loadAuth]);
 
   const loadInventory = useCallback(async (force = false) => {
@@ -97,14 +101,19 @@ export function StaffProvider({ children }) {
       if (invJson.success)   { setInventory(invJson.items || []); }
       if (alertJson.success) { setAlertList(alertJson.items || alertJson.alertList || []); }
       loaded.current.inventory = true;
-    } catch {}
+      fail("inventory", false);
+    } catch { fail("inventory", true); }
   }, [loadAuth]);
 
   const resetStaffCache = useCallback(() => {
     loaded.current = { appointments: false, inventory: false };
     setAppointments([]); setInventory([]); setAlertList([]);
-    setToken(""); setUser(null);
+    setToken(""); setUser(null); setErrors({});
   }, []);
+
+  // Same automatic wiring as AppContext, so logging out clears staff data even
+  // from a code path that forgets to call resetStaffCache by hand.
+  useEffect(() => registerCacheReset(resetStaffCache), [resetStaffCache]);
 
   return (
     <StaffContext.Provider value={{
@@ -113,7 +122,7 @@ export function StaffProvider({ children }) {
       alertList, setAlertList,
       token, setToken, user, setUser,
       loadAuth, loadAppointments, loadInventory,
-      resetStaffCache,
+      resetStaffCache, errors,
     }}>
       {children}
     </StaffContext.Provider>

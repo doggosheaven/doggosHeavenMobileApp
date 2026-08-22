@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  TextInput, Alert, ActivityIndicator,
+  TextInput, Alert, ActivityIndicator, RefreshControl,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
@@ -22,6 +22,7 @@ export default function SubscriptionDetailScreen() {
   const [customAmount, setCustomAmount] = useState("");
   const [selectedAmount, setSelectedAmount] = useState(null);
   const [paying, setPaying] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     const { user, token } = await getAuth();
@@ -32,8 +33,8 @@ export default function SubscriptionDetailScreen() {
       });
       const data = await res.json();
       if (data.success) setWallet(data.wallet);
-    } catch (e) { console.log(e); }
-    finally { setLoading(false); }
+    } catch (e) { __DEV__ && console.log(e); }
+    finally { setLoading(false); setRefreshing(false); }
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -107,7 +108,13 @@ export default function SubscriptionDetailScreen() {
         <Text style={s.headerTitle}>Boarding Subscription</Text>
         <View style={{ width: 36 }} />
       </View>
-      <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={s.scroll}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor="#0B3D2E" />
+        }
+      >
 
         {/* Hero Plan Card */}
         <View style={s.hero}>

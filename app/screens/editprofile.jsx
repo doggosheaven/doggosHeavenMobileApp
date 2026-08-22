@@ -83,7 +83,7 @@ export default function EditProfileScreen() {
 
       // Step 2: Update name + phone
       const updateBody = JSON.stringify({ fullName: form.fullName.trim(), phone: form.phone.trim() });
-      console.log("Sending updateprofile body:", updateBody);
+      __DEV__ && console.log("Sending updateprofile body:", updateBody);
       const res = await fetch(`${BASE_URL}/api/v1/auth/updateprofile`, {
         method: "PUT",
         headers: {
@@ -94,7 +94,7 @@ export default function EditProfileScreen() {
         body: updateBody,
       });
       const data = await res.json();
-      console.log("updateprofile response:", data);
+      __DEV__ && console.log("updateprofile response:", data);
 
       if (data.success) {
         await saveAuth(token, {

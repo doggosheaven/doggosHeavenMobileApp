@@ -61,7 +61,7 @@ const getLogoBase64 = async () => {
     _cachedLogo = `data:image/png;base64,${base64}`;
     return _cachedLogo;
   } catch (e) {
-    console.log("Logo load error:", e);
+    __DEV__ && console.log("Logo load error:", e);
     return null;
   }
 };
@@ -270,7 +270,7 @@ const savePDF = async (html, fileName) => {
       ]
     );
   } catch (e) {
-    console.log("PDF save error:", e);
+    __DEV__ && console.log("PDF save error:", e);
     // Fallback: share directly
     try {
       const { uri } = await Print.printToFileAsync({ html, base64: false });
