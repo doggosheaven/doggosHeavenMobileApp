@@ -56,6 +56,7 @@ export default function ProfileScreen() {
   const menuItems = [
     { icon: "document-text-outline", label: "My Prescriptions", onPress: () => router.push("/screens/myprescriptions"), iconColor: "#3E7B27" },
     { icon: "paw-outline", label: "My Pets", onPress: () => router.push("/screens/mypets"), iconColor: "#3E7B27" },
+    { icon: "medkit-outline", label: "Vaccinations", onPress: () => router.push("/screens/vaccinations"), iconColor: "#3E7B27" },
     { icon: "wallet-outline", label: "My Wallet", onPress: () => router.push("/screens/walletscreen"), iconColor: "#3E7B27" },
     { icon: "home-outline", label: "15-Day Boarding Plan", onPress: () => router.push("/screens/boardingsubscription"), iconColor: "#3E7B27" },
     { icon: "notifications-outline", label: "Notifications", onPress: () => router.push("/screens/notifications") },

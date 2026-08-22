@@ -175,6 +175,16 @@ export default function WalletScreen() {
           <View style={s.section}>
             <View style={s.sectionHeaderRow}>
               <Text style={s.sectionTitle}>Recent Transactions</Text>
+              {wallet?.transactions?.length > 5 && (
+                <TouchableOpacity
+                  onPress={() => router.push("/screens/wallethistory")}
+                  activeOpacity={0.7}
+                  style={{ flexDirection: "row", alignItems: "center", gap: 2 }}
+                >
+                  <Text style={s.seeAllTxt}>See all</Text>
+                  <Ionicons name="chevron-forward" size={14} color="#3E7B27" />
+                </TouchableOpacity>
+              )}
             </View>
             {recentTx.map((tx, i) => (
               <View key={i} style={[s.txRow, i === recentTx.length - 1 && { borderBottomWidth: 0 }]}>
@@ -213,6 +223,7 @@ export default function WalletScreen() {
 }
 
 const s = StyleSheet.create({
+  seeAllTxt: { fontSize: 12, fontFamily: "Poppins_700Bold", color: "#3E7B27" },
   container: { flex: 1, backgroundColor: "#F0F7F0" },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   scroll: { padding: 16, paddingBottom: 48 },

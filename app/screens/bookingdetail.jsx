@@ -1,13 +1,14 @@
 import { useState } from "react";
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  Alert,
+  Alert, ActivityIndicator,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useApp } from "../../context/AppContext";
 import { BASE_URL } from "../../constants/api";
 import { initiatePayment } from "../../utils/paymentHelper";
+import { downloadInvoicePDF } from "../../utils/invoiceGenerator";
 
 const STATUS_CONFIG = {
   pending:   { label: "Pending",   bg: "#FFF9E6", color: "#B8860B", icon: "⏳", desc: "Waiting for confirmation from Doggos Heaven team." },
@@ -22,6 +23,7 @@ export default function BookingDetailScreen() {
   const { user, token, appointments, loadAppointments, setAppointments } = useApp();
 
   const appt = appointments.find((a) => a._id === params.id);
+  const [downloading, setDownloading] = useState(false);
 
   if (!appt) {
     return (
@@ -217,12 +219,33 @@ export default function BookingDetailScreen() {
           </TouchableOpacity>
         )}
 
-        {/* Invoice — hidden for customer, only admin can view */}
-        {/* {(appt.status === "completed" || appt.paymentStatus === "paid") && (
-          <TouchableOpacity style={styles.invoiceBtn}>
-            <Text>View Invoice</Text>
+        {(appt.status === "completed" || appt.paymentStatus === "paid") && (
+          <TouchableOpacity
+            style={styles.invoiceBtn}
+            activeOpacity={0.85}
+            disabled={downloading}
+            onPress={async () => {
+              setDownloading(true);
+              try {
+                await downloadInvoicePDF({ ...appt, customerId: appt.customerId || user });
+              } catch (e) {
+                __DEV__ && console.log(e);
+                Alert.alert("Could not create the invoice", "Please try again in a moment.");
+              } finally {
+                setDownloading(false);
+              }
+            }}
+          >
+            {downloading ? (
+              <ActivityIndicator size="small" color="#A8D96C" />
+            ) : (
+              <>
+                <Ionicons name="download-outline" size={18} color="#A8D96C" />
+                <Text style={styles.invoiceBtnTxt}>Download Invoice</Text>
+              </>
+            )}
           </TouchableOpacity>
-        )} */}
+        )}
 
         {appt.status === "confirmed" && appt.paymentStatus === "paid" && (
           <View style={styles.paidBanner}>
@@ -275,6 +298,12 @@ const rowStyles = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
+  invoiceBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    backgroundColor: "#0B3D2E", borderRadius: 14, paddingVertical: 14,
+    marginHorizontal: 16, marginTop: 12,
+  },
+  invoiceBtnTxt: { fontSize: 14, fontFamily: "Poppins_700Bold", color: "#A8D96C" },
   container: { flex: 1, backgroundColor: "#F0F7F0" },
   scroll: { padding: 16, paddingBottom: 48 },
 
