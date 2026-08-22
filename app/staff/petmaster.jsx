@@ -8,6 +8,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
+import { ErrorState } from "../../components/ScreenState";
 
 const fmtDate = (d) =>
   d ? new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
@@ -77,7 +78,7 @@ function PetDetail({ pet: initialPet, onBack, token }) {
       });
       const json = await res.json();
       setVisits(json.List || json.list || []);
-    } catch (e) { console.log(e); }
+    } catch (e) { __DEV__ && console.log(e); }
     finally { setVisitsLoading(false); }
   };
 
@@ -96,7 +97,7 @@ function PetDetail({ pet: initialPet, onBack, token }) {
       });
       const json = await res.json();
       setVisitTypes(json.visitTypes || []);
-    } catch (e) { console.log(e); }
+    } catch (e) { __DEV__ && console.log(e); }
     finally { setVtLoading(false); }
   };
 
@@ -515,6 +516,7 @@ export default function StaffPetMaster() {
   const [petList, setPetList] = useState([]);
   const [selectedPet, setSelectedPet] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [name, setName] = useState("");
@@ -530,7 +532,8 @@ export default function StaffPetMaster() {
       });
       const json = await res.json();
       setPetList(json.pets || json.list || []);
-    } catch (e) { console.log(e); }
+      setLoadError(false);
+    } catch (e) { __DEV__ && console.log(e); setLoadError(true); }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 
@@ -557,7 +560,7 @@ export default function StaffPetMaster() {
       });
       const json = await res.json();
       if (json.success) setSelectedPet(json.pet);
-    } catch (e) { console.log(e); }
+    } catch (e) { __DEV__ && console.log(e); }
     finally { setDetailLoading(false); }
   };
 
@@ -628,6 +631,11 @@ export default function StaffPetMaster() {
 
       {loading ? (
         <ActivityIndicator size="large" color="#0B3D2E" style={{ flex: 1 }} />
+      ) : loadError ? (
+        <ErrorState
+          message="Could not load the pet list. Check your connection."
+          onRetry={() => { setLoading(true); setLoadError(false); search(name, phone); }}
+        />
       ) : (
         <ScrollView
           showsVerticalScrollIndicator={false}

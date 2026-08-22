@@ -9,6 +9,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
+import { ErrorState } from "../../components/ScreenState";
 
 const PRICE_PER_DAY = 766.67;
 
@@ -21,6 +22,7 @@ export default function StaffBoardingSubscriptions() {
   const router = useRouter();
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState("active");
   const [token, setToken] = useState(null);
@@ -49,8 +51,9 @@ export default function StaffBoardingSubscriptions() {
       if (data.success) {
         cache.current[status] = data.bookings || [];
         setBookings(data.bookings || []);
-      }
-    } catch { }
+        setLoadError(false);
+      } else setLoadError(true);
+    } catch { setLoadError(true); }
     finally { setLoading(false); setRefreshing(false); }
   }, [filter]);
 
@@ -307,6 +310,11 @@ export default function StaffBoardingSubscriptions() {
         <View style={s.centered}>
           <ActivityIndicator size="large" color="#0B3D2E" />
         </View>
+      ) : loadError ? (
+        <ErrorState
+          message="Could not load boarding subscriptions. Check your connection."
+          onRetry={() => { setLoading(true); setLoadError(false); load(filter); }}
+        />
       ) : (
         <ScrollView
           showsVerticalScrollIndicator={false}

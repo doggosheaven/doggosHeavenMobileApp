@@ -8,6 +8,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
+import { ErrorState } from "../../components/ScreenState";
 
 // Pad to a full six-row grid so the calendar keeps one height all year — an
 // unpadded month renders four, five or six rows and the dialog jumps about.
@@ -248,6 +249,7 @@ export default function StaffServicesDone() {
   const [selectedType, setSelectedType] = useState("All");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [token, setToken] = useState("");
   const [showFilter, setShowFilter] = useState(false);
@@ -268,7 +270,7 @@ export default function StaffServicesDone() {
       if (vtJson.success) setVisitTypes(vtJson.visitTypes || []);
       if (listJson.success) setList(listJson.List || []);
       else setList([]);
-    } catch (e) { console.log(e); }
+    } catch (e) { __DEV__ && console.log(e); setLoadError(true); }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 
@@ -339,6 +341,11 @@ export default function StaffServicesDone() {
 
       {loading ? (
         <ActivityIndicator size="large" color="#0B3D2E" style={{ flex: 1 }} />
+      ) : loadError ? (
+        <ErrorState
+          message="Could not load the visits for this day. Check your connection."
+          onRetry={() => { setLoading(true); setLoadError(false); load(date); }}
+        />
       ) : (
         <ScrollView
           showsVerticalScrollIndicator={false}

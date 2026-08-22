@@ -8,6 +8,7 @@ import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
+import { ErrorState } from "../../components/ScreenState";
 
 const STATUS_COLOR = { pending: "#F59E0B", confirmed: "#3E7B27", completed: "#0B3D2E", cancelled: "#C62828" };
 const STATUS_BG    = { pending: "#FFF9E6", confirmed: "#E8F5E8", completed: "#E8F5E8", cancelled: "#FFEBEE" };
@@ -60,6 +61,7 @@ export default function StaffNotifications() {
   const router = useRouter();
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [token, setToken] = useState("");
 
@@ -71,8 +73,9 @@ export default function StaffNotifications() {
         headers: { Authorization: t || "" },
       });
       const json = await res.json();
-      if (json.success) setAlerts(json.alerts || []);
-    } catch {}
+      if (json.success) { setAlerts(json.alerts || []); setLoadError(false); }
+      else setLoadError(true);
+    } catch { setLoadError(true); }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 
@@ -140,6 +143,11 @@ export default function StaffNotifications() {
 
       {loading ? (
         <ActivityIndicator size="large" color="#0B3D2E" style={{ flex: 1 }} />
+      ) : loadError ? (
+        <ErrorState
+          message="Could not load notifications. Check your connection."
+          onRetry={() => { setLoading(true); setLoadError(false); load(); }}
+        />
       ) : (
         <ScrollView
           showsVerticalScrollIndicator={false}

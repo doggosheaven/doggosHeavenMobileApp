@@ -8,6 +8,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
+import { ErrorState } from "../../components/ScreenState";
 
 const fmtDateTime = (d) =>
   d ? new Date(d).toLocaleString("en-IN", {
@@ -31,6 +32,7 @@ export default function StaffDeboard() {
   const [selectedCat, setSelectedCat] = useState(null);
   const [petsList, setPetsList] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [petsLoading, setPetsLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -73,8 +75,12 @@ export default function StaffDeboard() {
           selectedCatRef.current = cats[0];
           fetchPets(cats[0], token);
         }
-      }
-    } catch (e) { if (__DEV__) console.log(e); }
+        setLoadError(false);
+      } else setLoadError(true);
+    } catch (e) {
+      if (__DEV__) console.log(e);
+      setLoadError(true);
+    }
     finally { setLoading(false); }
   }, [fetchPets]);
 
@@ -286,6 +292,11 @@ export default function StaffDeboard() {
         <View style={s.centered}>
           <ActivityIndicator size="large" color="#0B3D2E" />
         </View>
+      ) : loadError ? (
+        <ErrorState
+          message="Could not load boarding categories. Check your connection."
+          onRetry={() => { setLoading(true); setLoadError(false); loadCategories(); }}
+        />
       ) : (
         <>
           {/* Category Chips */}

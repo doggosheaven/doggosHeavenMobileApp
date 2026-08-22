@@ -9,12 +9,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
+import { ErrorState } from "../../components/ScreenState";
 
 
 export default function StaffMyServices() {
   const router = useRouter();
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [token, setToken] = useState("");
   const [search, setSearch] = useState("");
@@ -29,7 +31,7 @@ export default function StaffMyServices() {
       });
       const json = await res.json();
       if (json.success) setServices(json.visitTypes || []);
-    } catch { }
+    } catch { setLoadError(true); }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 
@@ -73,6 +75,11 @@ export default function StaffMyServices() {
 
       {loading ? (
         <ActivityIndicator size="large" color="#0B3D2E" style={{ flex: 1 }} />
+      ) : loadError ? (
+        <ErrorState
+          message="Could not load the services. Check your connection."
+          onRetry={() => { setLoading(true); setLoadError(false); load(); }}
+        />
       ) : (
         <ScrollView
           showsVerticalScrollIndicator={false}

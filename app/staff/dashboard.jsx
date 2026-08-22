@@ -9,6 +9,7 @@ import { useRouter } from "expo-router";
 import { getAuth } from "../../utils/authStorage";
 import { BASE_URL } from "../../constants/api";
 import { registerCacheReset } from "../../utils/sessionCache";
+import { ErrorState } from "../../components/ScreenState";
 
 // Pad to a full six-row grid so the calendar keeps one height all year — an
 // unpadded month renders four, five or six rows and the dialog jumps about.
@@ -42,6 +43,7 @@ export default function StaffDashboard() {
   const [data, setData] = useState(_cachedData);
   const [user, setUser] = useState(_cachedUser);
   const [loading, setLoading] = useState(!_dashboardLoaded);
+  const [loadError, setLoadError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const isFetching = useRef(false);
   const [token, setToken] = useState(_cachedToken);
@@ -83,7 +85,7 @@ export default function StaffDashboard() {
       _cachedToken = t || "";
       _cachedUser = u;
       _dashboardLoaded = true;
-    } catch (e) { if (__DEV__) console.log(e); }
+    } catch (e) { if (__DEV__) console.log(e); setLoadError(true); }
     finally { setLoading(false); setRefreshing(false); isFetching.current = false; }
   }, []);
 
@@ -200,6 +202,11 @@ export default function StaffDashboard() {
 
       {loading ? (
         <ActivityIndicator size="large" color="#0B3D2E" style={{ flex: 1 }} />
+      ) : loadError ? (
+        <ErrorState
+          message="Could not load your dashboard. Check your connection."
+          onRetry={() => { setLoading(true); setLoadError(false); load(true); }}
+        />
       ) : (
         <ScrollView
           showsVerticalScrollIndicator={false}
@@ -272,6 +279,7 @@ export default function StaffDashboard() {
           </View>
           <View style={s.actionsGrid}>
             {[
+              { label: "Add Customer", icon: "person-add-outline",     onPress: () => router.push("/staff/adduser") },
               { label: "My Bookings",  icon: "calendar-outline",      onPress: () => router.push("/staff/appointments") },
               { label: "Pet Master",   icon: "paw-outline",            onPress: () => router.push("/staff/petmaster") },
               { label: "Inventory",    icon: "cube-outline",           onPress: () => router.push("/staff/inventory") },

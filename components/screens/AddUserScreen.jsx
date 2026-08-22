@@ -11,6 +11,9 @@ import { BASE_URL } from "../../constants/api";
 const STATUS_BAR_HEIGHT = Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 44;
 
 const ROLE_OPTIONS = {
+  // Staff register walk-in customers; that is the only role they may hand out,
+  // so the picker collapses to nothing for them.
+  staff:      [{ v: "customer", l: "Customer", i: "paw" }],
   admin:      [{ v: "customer", l: "Customer", i: "paw" }, { v: "staff", l: "Staff", i: "medkit" }],
   // No superadmin here on purpose — the system keeps exactly one.
   superadmin: [
@@ -113,8 +116,8 @@ export default function AddUserScreen({ callerRole = "admin", accent = "#0B3D2E"
       </View>
 
       <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-        <Text style={s.label}>Role</Text>
-        <View style={s.roleRow}>
+        {roles.length > 1 && <Text style={s.label}>Role</Text>}
+        <View style={[s.roleRow, roles.length <= 1 && { display: "none" }]}>
           {roles.map((r) => (
             <TouchableOpacity
               key={r.v}
